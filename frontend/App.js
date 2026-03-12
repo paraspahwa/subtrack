@@ -1,0 +1,55 @@
+import { useEffect, useState } from "react";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { StatusBar } from "expo-status-bar";
+import { View, ActivityIndicator } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
+import { Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black } from "@expo-google-fonts/poppins";
+
+import LandingScreen  from "./src/screens/LandingScreen";
+import AuthScreen     from "./src/screens/AuthScreen";
+import DashboardScreen from "./src/screens/DashboardScreen";
+import PricingScreen  from "./src/screens/PricingScreen";
+import { colors }     from "./src/theme";
+
+const Stack = createNativeStackNavigator();
+
+export default function App() {
+  const [initialRoute, setInitialRoute] = useState(null);
+
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
+    Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black,
+  });
+
+  useEffect(() => {
+    (async () => {
+      const token = await AsyncStorage.getItem("st_token");
+      setInitialRoute(token ? "Dashboard" : "Landing");
+    })();
+  }, []);
+
+  if (!fontsLoaded || !initialRoute) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      <StatusBar style="light" />
+      <Stack.Navigator
+        initialRouteName={initialRoute}
+        screenOptions={{ headerShown: false, animation: "slide_from_right", contentStyle: { backgroundColor: colors.bg } }}
+      >
+        <Stack.Screen name="Landing"   component={LandingScreen}   />
+        <Stack.Screen name="Auth"      component={AuthScreen}      />
+        <Stack.Screen name="Dashboard" component={DashboardScreen} />
+        <Stack.Screen name="Pricing"   component={PricingScreen}   />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}

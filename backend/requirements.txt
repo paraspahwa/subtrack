@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+razorpay
+python-dotenv
+sqlalchemy
+psycopg2-binary
+werkzeug
+pyjwt

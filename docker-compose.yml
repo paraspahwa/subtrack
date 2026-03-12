@@ -1,0 +1,64 @@
+version: "3.8"
+
+# ─────────────────────────────────────────────────────────────────────
+# SubTrack — Docker Compose
+#
+# Production (Supabase):
+#   Set DATABASE_URL in .env to your Supabase connection string.
+#   Remove or comment out the `postgres` service below.
+#   Run: docker compose up backend frontend
+#
+# Local development (self-hosted Postgres):
+#   Keep the postgres service, use Option B DATABASE_URL in .env.
+#   Run: docker compose up
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Local Postgres (comment out when using Supabase) ─────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: subtrack_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subtrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: subtrack_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.example   # Use .env in production
+    # When using Supabase, remove the environment override below
+    # and set DATABASE_URL in your .env file instead.
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/subtrack
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: subtrack_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
