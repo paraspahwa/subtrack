@@ -4,15 +4,40 @@ Database configuration and models for SubTrack — Subscription Tracker
 
 import os
 from datetime import datetime
+from urllib.parse import quote, urlsplit, urlunsplit
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, JSON, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
+def _normalize_database_url(url: str) -> str:
+    """Percent-encode raw password chars in DB URL userinfo when needed."""
+    if not url or not url.startswith("postgresql://"):
+        return url
+
+    parts = urlsplit(url)
+    netloc = parts.netloc
+    if "@" not in netloc:
+        return url
+
+    userinfo, hostinfo = netloc.rsplit("@", 1)
+    if ":" not in userinfo:
+        return url
+
+    username, password = userinfo.split(":", 1)
+    encoded_password = quote(password, safe="")
+    if encoded_password == password:
+        return url
+
+    fixed_netloc = f"{username}:{encoded_password}@{hostinfo}"
+    return urlunsplit((parts.scheme, fixed_netloc, parts.path, parts.query, parts.fragment))
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:postgres@localhost/subtrack"
 )
+DATABASE_URL = _normalize_database_url(DATABASE_URL)
 
 # Supabase uses a connection pooler (Transaction mode on port 6543).
 # SQLAlchemy requires ?pgbouncer=true to disable prepared statements
