@@ -18,6 +18,7 @@ from calendar import monthrange
 import csv
 import io
 import secrets as secrets_module
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -256,6 +257,36 @@ def _parse_date(date_str: str) -> datetime:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {date_str}")
 
 
+ALLOWED_BILLING_CYCLES = {"monthly", "yearly", "weekly"}
+
+
+def _normalize_billing_cycle(value: Optional[str]) -> str:
+    cycle = (value or "monthly").strip().lower()
+    if cycle not in ALLOWED_BILLING_CYCLES:
+        raise HTTPException(status_code=400, detail="billing_cycle must be one of: monthly, yearly, weekly")
+    return cycle
+
+
+def _normalize_usage_rating(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return None
+    if value < 1 or value > 5:
+        raise HTTPException(status_code=400, detail="usage_rating must be between 1 and 5")
+    return value
+
+
+def _normalize_cancel_url(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="cancel_url must start with http:// or https://")
+    return cleaned
+
+
 @app.get("/api/subscriptions")
 def list_subscriptions(
     active_only: bool = False,
@@ -286,19 +317,30 @@ def create_subscription(
             detail=f"Free plan limited to {FREE_SUBSCRIPTION_LIMIT} active subscriptions. Upgrade to Pro for unlimited."
         )
 
+    if req.amount <= 0:
+        raise HTTPException(status_code=400, detail="amount must be greater than 0")
+
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    billing_cycle = _normalize_billing_cycle(req.billing_cycle)
+    usage_rating = _normalize_usage_rating(req.usage_rating)
+    cancel_url = _normalize_cancel_url(req.cancel_url)
+
     sub = Subscription(
         user_id=current_user.id,
-        name=req.name,
+        name=name,
         category=req.category,
         amount=req.amount,
         currency=req.currency,
-        billing_cycle=req.billing_cycle,
+        billing_cycle=billing_cycle,
         next_billing_date=_parse_date(req.next_billing_date),
         notes=req.notes,
         color=req.color,
         is_active=req.is_active,
-        usage_rating=req.usage_rating,
-        cancel_url=req.cancel_url,
+        usage_rating=usage_rating,
+        cancel_url=cancel_url,
     )
     db.add(sub)
     db.commit()
@@ -388,28 +430,35 @@ def update_subscription(
     db: Session = Depends(get_db)
 ):
     sub = _get_sub_or_404(sub_id, current_user.id, db)
+    fields_set = req.__fields_set__
+
     if req.name is not None:
-        sub.name = req.name
+        cleaned_name = req.name.strip()
+        if not cleaned_name:
+            raise HTTPException(status_code=400, detail="name is required")
+        sub.name = cleaned_name
     if req.category is not None:
         sub.category = req.category
     if req.amount is not None:
+        if req.amount <= 0:
+            raise HTTPException(status_code=400, detail="amount must be greater than 0")
         sub.amount = req.amount
     if req.currency is not None:
         sub.currency = req.currency
     if req.billing_cycle is not None:
-        sub.billing_cycle = req.billing_cycle
+        sub.billing_cycle = _normalize_billing_cycle(req.billing_cycle)
     if req.next_billing_date is not None:
         sub.next_billing_date = _parse_date(req.next_billing_date)
-    if req.notes is not None:
+    if "notes" in fields_set:
         sub.notes = req.notes
-    if req.color is not None:
+    if "color" in fields_set:
         sub.color = req.color
     if req.is_active is not None:
         sub.is_active = req.is_active
-    if req.usage_rating is not None:
-        sub.usage_rating = req.usage_rating
-    if req.cancel_url is not None:
-        sub.cancel_url = req.cancel_url
+    if "usage_rating" in fields_set:
+        sub.usage_rating = _normalize_usage_rating(req.usage_rating)
+    if "cancel_url" in fields_set:
+        sub.cancel_url = _normalize_cancel_url(req.cancel_url)
     sub.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(sub)

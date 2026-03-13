@@ -13,13 +13,21 @@ from database import User, get_db
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+
+def _token_ttl_seconds() -> int:
+    raw = os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS", "86400")
+    try:
+        ttl = int(raw)
+    except ValueError:
+        ttl = 86400
+    return max(300, ttl)
 
 
 def create_access_token(user_id: int, expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token"""
     if expires_delta is None:
-        expires_delta = timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+        expires_delta = timedelta(seconds=_token_ttl_seconds())
     
     expire = datetime.utcnow() + expires_delta
     to_encode = {"user_id": user_id, "exp": expire}
