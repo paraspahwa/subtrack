@@ -1,27 +1,27 @@
 export const colors = {
-  bg:           "#0a0a1a",
-  bg2:          "#0f0f23",
-  bg3:          "#14142a",
-  card:         "#1a1a3e",
-  card2:        "#1e1e4a",
+  bg:           "#f6f3ea",
+  bg2:          "#fffdf8",
+  bg3:          "#f0ebde",
+  card:         "#fffaf0",
+  card2:        "#fff7e5",
 
-  border:       "rgba(124,58,237,0.25)",
-  border2:      "rgba(255,255,255,0.08)",
+  border:       "rgba(18,94,89,0.24)",
+  border2:      "rgba(15,23,42,0.10)",
 
-  text:         "#f8fafc",
-  text2:        "#cbd5e1",
-  text3:        "#94a3b8",
-  text4:        "#64748b",
+  text:         "#1f2937",
+  text2:        "#334155",
+  text3:        "#64748b",
+  text4:        "#94a3b8",
 
-  primary:      "#7c3aed",
-  primaryDark:  "#5b21b6",
-  primaryLight: "#a78bfa",
-  cyan:         "#06b6d4",
-  cyanLight:    "#67e8f9",
+  primary:      "#125e59",
+  primaryDark:  "#0f4b47",
+  primaryLight: "#1f7a73",
+  cyan:         "#d97706",
+  cyanLight:    "#f59e0b",
 
-  success:      "#10b981",
-  warning:      "#f59e0b",
-  error:        "#ef4444",
+  success:      "#15803d",
+  warning:      "#c2410c",
+  error:        "#dc2626",
 };
 
 export const categoryColors = {

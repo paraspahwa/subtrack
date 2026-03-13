@@ -5,23 +5,25 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme";
 import { api } from "../api";
+import StaggerReveal from "../components/StaggerReveal";
+import InteractiveButton from "../components/InteractiveButton";
+import BrandShapes from "../components/BrandShapes";
 
 const FREE_FEATURES = [
   "Up to 10 subscriptions",
-  "Monthly & yearly spend summary",
+  "Renewal timeline",
+  "Core analytics",
   "Category organization",
-  "Renewal date tracking",
-  "Basic analytics",
+  "CSV export",
 ];
 
 const PRO_FEATURES = [
   "Unlimited subscriptions",
-  "Full analytics dashboard",
-  "Renewal alerts (30-day view)",
-  "Most expensive breakdown",
-  "Spend by category charts",
+  "Advanced spend insights",
+  "Priority renewal reminders",
+  "Waste detection and savings view",
+  "Most expensive service tracking",
   "Priority support",
-  "Everything in Free",
 ];
 
 export default function PricingScreen({ navigation }) {
@@ -36,7 +38,6 @@ export default function PricingScreen({ navigation }) {
   };
 
   const handleUpgrade = async () => {
-    // 1. Check if user is logged in
     const token = await AsyncStorage.getItem("st_token");
     if (!token) {
       navigation.navigate("Auth", { mode: "signup" });
@@ -45,15 +46,13 @@ export default function PricingScreen({ navigation }) {
 
     setLoading(true);
     try {
-      // 2. Create a Razorpay order on the backend (900 paise = ₹9 / $9 equivalent)
       const order = await api.createOrder({ amount: 900, currency: "INR", plan_type: "pro" });
-
-      // 3. Open Razorpay native checkout
       const RazorpayCheckout = loadCheckout();
       if (!RazorpayCheckout) {
         throw new Error("Native checkout is unavailable in this build. Use an Android/iOS dev build for payment testing.");
       }
-      const options = {
+
+      const paymentData = await RazorpayCheckout.open({
         description: "SubTrack Pro — Unlimited subscriptions",
         image: "https://i.imgur.com/3g7nmJC.png",
         currency: order.currency || "INR",
@@ -63,15 +62,12 @@ export default function PricingScreen({ navigation }) {
         order_id: order.razorpay_order_id,
         prefill: { email: order.email || "" },
         theme: { color: colors.primary },
-      };
+      });
 
-      const paymentData = await RazorpayCheckout.open(options);
-
-      // 4. Verify payment on the backend
       await api.verifyPayment({
-        razorpay_order_id:   paymentData.razorpay_order_id,
+        razorpay_order_id: paymentData.razorpay_order_id,
         razorpay_payment_id: paymentData.razorpay_payment_id,
-        razorpay_signature:  paymentData.razorpay_signature,
+        razorpay_signature: paymentData.razorpay_signature,
       });
 
       const me = await api.me();
@@ -82,15 +78,9 @@ export default function PricingScreen({ navigation }) {
         plan: me.plan,
       }));
 
-      Alert.alert(
-        "🎉 Welcome to Pro!",
-        "Your subscription is now active. Enjoy unlimited tracking.",
-        [{ text: "Go to Dashboard", onPress: () => navigation.navigate("Dashboard") }]
-      );
+      Alert.alert("Welcome to Pro", "Your Pro subscription is active.", [{ text: "Go to Dashboard", onPress: () => navigation.navigate("Dashboard") }]);
     } catch (err) {
-      if (err?.code === "PAYMENT_CANCELLED") {
-        // User dismissed — no alert needed
-      } else {
+      if (err?.code !== "PAYMENT_CANCELLED") {
         Alert.alert("Payment failed", err?.message || "Something went wrong. Please try again.");
       }
     } finally {
@@ -98,111 +88,109 @@ export default function PricingScreen({ navigation }) {
     }
   };
 
+  const FeatureList = ({ items }) => (
+    <View style={s.featureList}>
+      {items.map((item) => (
+        <View key={item} style={s.featureRow}>
+          <View style={s.dot} />
+          <Text style={s.featureText}>{item}</Text>
+        </View>
+      ))}
+    </View>
+  );
+
   return (
     <SafeAreaView style={s.safe}>
+      <BrandShapes variant="pricing" style={s.bgShapes} />
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-
-        <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
-          <Text style={s.backText}>← Back</Text>
-        </TouchableOpacity>
-
-        <Text style={s.title}>Simple, honest pricing</Text>
-        <Text style={s.sub}>Start free. Upgrade when you need more.</Text>
-
-        {/* Free */}
-        <View style={s.card}>
-          <Text style={s.planLabel}>Free</Text>
-          <View style={s.priceRow}>
-            <Text style={s.price}>$0</Text>
-            <Text style={s.pricePer}>/month</Text>
-          </View>
-          <Text style={s.planDesc}>Perfect for getting started</Text>
-
-          <View style={s.divider} />
-
-          {FREE_FEATURES.map(f => (
-            <View key={f} style={s.featureRow}>
-              <Text style={s.check}>✓</Text>
-              <Text style={s.featureText}>{f}</Text>
-            </View>
-          ))}
-
-          <TouchableOpacity style={s.freeBtn} onPress={() => navigation.navigate("Auth", { mode: "signup" })}>
-            <Text style={s.freeBtnText}>Get Started Free</Text>
+        <View style={s.topRow}>
+          <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
+            <Text style={s.backText}>Back</Text>
           </TouchableOpacity>
+          <Text style={s.topPill}>No hidden fees</Text>
         </View>
 
-        {/* Pro */}
-        <View style={[s.card, s.proCard]}>
-          <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.badge}>
-            <Text style={s.badgeText}>MOST POPULAR</Text>
-          </LinearGradient>
+        <Text style={s.title}>Simple pricing for better spending habits</Text>
+        <Text style={s.sub}>Choose free to start. Move to Pro when your stack grows.</Text>
 
-          <Text style={[s.planLabel, { color: colors.primaryLight }]}>Pro</Text>
-          <View style={s.priceRow}>
-            <Text style={[s.price, s.proPrice]}>$9</Text>
-            <Text style={s.pricePer}>/month</Text>
-          </View>
-          <Text style={s.planDesc}>For power users who want full control</Text>
-
-          <View style={s.divider} />
-
-          {PRO_FEATURES.map(f => (
-            <View key={f} style={s.featureRow}>
-              <Text style={s.check}>✓</Text>
-              <Text style={s.featureText}>{f}</Text>
+        <View style={s.grid}>
+          <StaggerReveal delay={90} profile="snappy">
+            <View style={s.card}>
+            <Text style={s.plan}>Free</Text>
+            <View style={s.priceRow}><Text style={s.price}>$0</Text><Text style={s.per}>/month</Text></View>
+            <Text style={s.desc}>For individuals getting visibility into recurring spend.</Text>
+            <FeatureList items={FREE_FEATURES} />
+            <InteractiveButton label="Start Free" variant="ghost" onPress={() => navigation.navigate("Auth", { mode: "signup" })} />
             </View>
-          ))}
+          </StaggerReveal>
 
-          <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.proBtn}>
-            <TouchableOpacity style={s.proBtnInner} onPress={handleUpgrade} disabled={loading}>
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={s.proBtnText}>⚡  Upgrade to Pro — $9/mo</Text>
-              }
-            </TouchableOpacity>
-          </LinearGradient>
+          <StaggerReveal delay={170} profile="smooth">
+            <LinearGradient colors={["#0f4b47", "#125e59"]} style={s.proCard}>
+            <Text style={s.badge}>Recommended</Text>
+            <Text style={s.planPro}>Pro</Text>
+            <View style={s.priceRow}><Text style={s.pricePro}>$9</Text><Text style={s.perPro}>/month</Text></View>
+            <Text style={s.descPro}>For power users who optimize every renewal decision.</Text>
+            <View style={s.featureList}>
+              {PRO_FEATURES.map((item) => (
+                <View key={item} style={s.featureRow}>
+                  <View style={s.dotPro} />
+                  <Text style={s.featureTextPro}>{item}</Text>
+                </View>
+              ))}
+            </View>
+            {loading ? (
+              <TouchableOpacity style={s.proBtnLoading} disabled>
+                <ActivityIndicator color={colors.primaryDark} />
+              </TouchableOpacity>
+            ) : (
+              <InteractiveButton label="Upgrade to Pro" variant="ghost" onPress={handleUpgrade} textStyle={s.proInteractiveText} />
+            )}
+            </LinearGradient>
+          </StaggerReveal>
         </View>
 
-        <Text style={s.footer}>14-day money-back guarantee · Cancel anytime</Text>
-
+        <Text style={s.footer}>Cancel anytime • 14-day money-back guarantee</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  safe:       { flex: 1, backgroundColor: colors.bg },
-  scroll:     { padding: 20 },
-  back:       { paddingVertical: 8, marginBottom: 16 },
-  backText:   { fontFamily: "Inter_500Medium", fontSize: 14, color: colors.text3 },
-  title:      { fontFamily: "Poppins_900Black", fontSize: 28, color: colors.text, marginBottom: 8 },
-  sub:        { fontFamily: "Inter_400Regular", fontSize: 15, color: colors.text3, marginBottom: 28 },
+  safe: { flex: 1, backgroundColor: colors.bg },
+  bgShapes: { opacity: 0.72 },
+  scroll: { padding: 20, paddingBottom: 34 },
 
-  card:       { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border2, borderRadius: 24, padding: 28, marginBottom: 20 },
-  proCard:    { borderColor: "rgba(124,58,237,0.5)" },
-  badge:      { alignSelf: "flex-start", borderRadius: 100, paddingHorizontal: 14, paddingVertical: 5, marginBottom: 16 },
-  badgeText:  { fontFamily: "Inter_700Bold", fontSize: 11, color: "#fff", letterSpacing: 1 },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  back: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.62)" },
+  backText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text2 },
+  topPill: { fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.primary, textTransform: "uppercase", letterSpacing: 1 },
 
-  planLabel:  { fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text4, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
-  priceRow:   { flexDirection: "row", alignItems: "flex-end", gap: 4, marginBottom: 4 },
-  price:      { fontFamily: "Poppins_900Black", fontSize: 48, color: colors.text, lineHeight: 52 },
-  proPrice:   { color: colors.primaryLight },
-  pricePer:   { fontFamily: "Inter_400Regular", fontSize: 16, color: colors.text3, marginBottom: 8 },
-  planDesc:   { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text3, marginBottom: 4 },
+  title: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 33, lineHeight: 39, marginBottom: 8 },
+  sub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 15, lineHeight: 22, marginBottom: 20 },
 
-  divider:    { height: 1, backgroundColor: colors.border2, marginVertical: 20 },
+  grid: { gap: 14 },
+  card: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border2, borderRadius: 22, padding: 20 },
+  plan: { fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text3, textTransform: "uppercase", letterSpacing: 1 },
+  priceRow: { flexDirection: "row", alignItems: "flex-end", gap: 4, marginVertical: 6 },
+  price: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 50, lineHeight: 52 },
+  per: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 15, marginBottom: 7 },
+  desc: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 8 },
 
-  featureRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
-  check:      { fontFamily: "Inter_700Bold", fontSize: 14, color: colors.success, marginTop: 1 },
-  featureText:{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text2, flex: 1 },
+  featureList: { marginTop: 8, marginBottom: 14 },
+  featureRow: { flexDirection: "row", alignItems: "center", marginBottom: 9 },
+  dot: { width: 7, height: 7, borderRadius: 7, backgroundColor: colors.primary, marginRight: 10 },
+  featureText: { fontFamily: "Inter_500Medium", color: colors.text2, fontSize: 14, flex: 1 },
 
-  freeBtn:    { borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 8 },
-  freeBtnText:{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text2 },
+  proCard: { borderRadius: 22, padding: 20 },
+  badge: { alignSelf: "flex-start", backgroundColor: "rgba(248,250,252,0.15)", borderWidth: 1, borderColor: "rgba(248,250,252,0.38)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, fontFamily: "Inter_700Bold", color: "#f8fafc", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
+  planPro: { fontFamily: "Inter_700Bold", fontSize: 13, color: "rgba(248,250,252,0.88)", textTransform: "uppercase", letterSpacing: 1 },
+  pricePro: { fontFamily: "Poppins_900Black", color: "#f8fafc", fontSize: 50, lineHeight: 52 },
+  perPro: { fontFamily: "Inter_500Medium", color: "rgba(248,250,252,0.78)", fontSize: 15, marginBottom: 7 },
+  descPro: { fontFamily: "Inter_400Regular", color: "rgba(248,250,252,0.82)", fontSize: 14, lineHeight: 20, marginBottom: 8 },
+  dotPro: { width: 7, height: 7, borderRadius: 7, backgroundColor: "#fde68a", marginRight: 10 },
+  featureTextPro: { fontFamily: "Inter_500Medium", color: "#f8fafc", fontSize: 14, flex: 1 },
+  proBtnLoading: { marginTop: 4, borderRadius: 12, backgroundColor: "#f8fafc", paddingVertical: 13, alignItems: "center" },
+  proInteractiveText: { color: colors.primaryDark },
 
-  proBtn:     { borderRadius: 12, marginTop: 8 },
-  proBtnInner:{ paddingVertical: 15, alignItems: "center" },
-  proBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
-
-  footer:     { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text4, textAlign: "center", marginBottom: 32 },
+  footer: { marginTop: 16, textAlign: "center", fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 12 },
 });

@@ -4,16 +4,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
 import { api } from "../api";
+import StaggerReveal from "../components/StaggerReveal";
+import BrandShapes from "../components/BrandShapes";
 
 export default function SettingsScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("st_user").then(raw => {
+    AsyncStorage.getItem("st_user").then((raw) => {
       if (raw) setUser(JSON.parse(raw));
     });
-    AsyncStorage.getItem("st_notifications").then(val => {
+    AsyncStorage.getItem("st_notifications").then((val) => {
       setNotificationsEnabled(val === "true");
     });
   }, []);
@@ -22,7 +24,9 @@ export default function SettingsScreen({ navigation }) {
     Alert.alert("Log out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Log out", style: "destructive", onPress: async () => {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
           await AsyncStorage.multiRemove(["st_token", "st_user"]);
           navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
         },
@@ -31,36 +35,29 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "This will permanently delete your account and all subscription data. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account", style: "destructive", onPress: async () => {
-            try {
-              await api.deleteAccount();
-              await AsyncStorage.multiRemove(["st_token", "st_user"]);
-              navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
-            } catch (err) {
-              Alert.alert("Error", err.message || "Failed to delete account.");
-            }
-          },
+    Alert.alert("Delete Account", "This will permanently delete your account and subscription data.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete Account",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteAccount();
+            await AsyncStorage.multiRemove(["st_token", "st_user"]);
+            navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
+          } catch (err) {
+            Alert.alert("Error", err.message || "Failed to delete account.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleExportCSV = async () => {
     const token = await AsyncStorage.getItem("st_token");
     if (!token) return;
     const url = api.exportCsvUrl();
-    // Open the CSV URL in the browser — the Authorization header approach
-    // requires a manual download. For Expo, we open via Linking with token in URL param.
-    // (In production, use a short-lived signed download URL instead.)
-    Linking.openURL(`${url}?token=${token}`).catch(() =>
-      Alert.alert("Error", "Could not open export URL.")
-    );
+    Linking.openURL(`${url}?token=${token}`).catch(() => Alert.alert("Error", "Could not open export URL."));
   };
 
   const toggleNotifications = async (val) => {
@@ -68,104 +65,97 @@ export default function SettingsScreen({ navigation }) {
     await AsyncStorage.setItem("st_notifications", val ? "true" : "false");
   };
 
-  const Row = ({ icon, label, value, onPress, isDestructive, rightElement }) => (
+  const Row = ({ label, value, onPress, isDanger, rightElement }) => (
     <TouchableOpacity style={s.row} onPress={onPress} disabled={!onPress && !rightElement}>
-      <View style={s.rowLeft}>
-        <Text style={s.rowIcon}>{icon}</Text>
-        <Text style={[s.rowLabel, isDestructive && { color: colors.error }]}>{label}</Text>
-      </View>
-      {rightElement || (value ? <Text style={s.rowValue}>{value}</Text> : <Text style={s.chevron}>›</Text>)}
+      <Text style={[s.rowLabel, isDanger && s.rowLabelDanger]}>{label}</Text>
+      {rightElement || (value ? <Text style={s.rowValue}>{value}</Text> : <Text style={s.rowChevron}>›</Text>)}
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={s.safe}>
+      <BrandShapes variant="settings" style={s.bgShapes} />
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <StaggerReveal style={s.headRow} delay={50} profile="snappy">
+          <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}><Text style={s.backText}>Back</Text></TouchableOpacity>
+          <Text style={s.badge}>Profile and Preferences</Text>
+        </StaggerReveal>
 
-        <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
-          <Text style={s.backText}>← Back</Text>
-        </TouchableOpacity>
+        <StaggerReveal delay={90} profile="smooth">
+          <Text style={s.title}>Settings</Text>
+          <Text style={s.sub}>Manage account details, reminders, and your data controls.</Text>
+        </StaggerReveal>
 
-        <Text style={s.title}>Settings</Text>
-
-        {/* Account */}
-        <Text style={s.sectionLabel}>Account</Text>
-        <View style={s.section}>
-          <Row icon="📧" label="Email" value={user?.email || "—"} />
+        <StaggerReveal style={s.section} delay={130} profile="smooth">
+          <Text style={s.sectionLabel}>Account</Text>
+          <Row label="Email" value={user?.email || "-"} />
           <View style={s.divider} />
-          <Row icon="👤" label="Name" value={user?.name || "—"} />
+          <Row label="Name" value={user?.name || "-"} />
           <View style={s.divider} />
-          <Row
-            icon="⭐"
-            label="Plan"
-            value={user?.plan === "pro" ? "Pro ✓" : "Free"}
-            onPress={() => navigation.navigate("Pricing")}
-          />
-        </View>
+          <Row label="Plan" value={user?.plan === "pro" ? "Pro" : "Free"} onPress={() => navigation.navigate("Pricing")} />
+        </StaggerReveal>
 
-        {/* Preferences */}
-        <Text style={s.sectionLabel}>Preferences</Text>
-        <View style={s.section}>
+        <StaggerReveal style={s.section} delay={160} profile="smooth">
+          <Text style={s.sectionLabel}>Preferences</Text>
           <Row
-            icon="🔔"
-            label="Renewal Reminders"
+            label="Renewal reminders"
             rightElement={
               <Switch
                 value={notificationsEnabled}
                 onValueChange={toggleNotifications}
-                trackColor={{ true: colors.primary }}
-                thumbColor={notificationsEnabled ? colors.primaryLight : colors.text4}
+                trackColor={{ false: "#cbd5e1", true: "#8ab0ad" }}
+                thumbColor={notificationsEnabled ? colors.primary : "#fff"}
               />
             }
           />
-        </View>
+        </StaggerReveal>
 
-        {/* Data */}
-        <Text style={s.sectionLabel}>Data</Text>
-        <View style={s.section}>
-          <Row icon="📥" label="Export to CSV" onPress={handleExportCSV} />
-        </View>
-
-        {/* Support */}
-        <Text style={s.sectionLabel}>Support</Text>
-        <View style={s.section}>
-          <Row icon="📖" label="API Docs" onPress={() => Linking.openURL("http://localhost:8000/docs")} />
+        <StaggerReveal style={s.section} delay={190} profile="smooth">
+          <Text style={s.sectionLabel}>Data & Support</Text>
+          <Row label="Export subscriptions to CSV" onPress={handleExportCSV} />
           <View style={s.divider} />
-          <Row icon="🐛" label="Report a Bug" onPress={() => Linking.openURL("https://github.com/paraspahwa/subtrack/issues")} />
-        </View>
-
-        {/* Danger zone */}
-        <Text style={s.sectionLabel}>Account Actions</Text>
-        <View style={s.section}>
-          <Row icon="🚪" label="Log Out" onPress={handleLogout} />
+          <Row label="Open API docs" onPress={() => Linking.openURL("http://localhost:8000/docs")} />
           <View style={s.divider} />
-          <Row icon="🗑️" label="Delete Account" onPress={handleDeleteAccount} isDestructive />
-        </View>
+          <Row label="Report a bug" onPress={() => Linking.openURL("https://github.com/paraspahwa/subtrack/issues")} />
+        </StaggerReveal>
 
-        <Text style={s.version}>SubTrack v1.0.0</Text>
+        <StaggerReveal style={s.section} delay={220} profile="smooth">
+          <Text style={s.sectionLabel}>Account Actions</Text>
+          <Row label="Log out" onPress={handleLogout} isDanger />
+          <View style={s.divider} />
+          <Row label="Delete account permanently" onPress={handleDeleteAccount} isDanger />
+        </StaggerReveal>
 
+        <StaggerReveal delay={250} profile="snappy">
+          <Text style={s.version}>SubTrack v1.0.0</Text>
+        </StaggerReveal>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  safe:         { flex: 1, backgroundColor: colors.bg },
-  scroll:       { padding: 20 },
-  back:         { paddingVertical: 8, marginBottom: 8 },
-  backText:     { fontFamily: "Inter_500Medium", fontSize: 14, color: colors.text3 },
-  title:        { fontFamily: "Poppins_900Black", fontSize: 28, color: colors.text, marginBottom: 24 },
+  safe: { flex: 1, backgroundColor: colors.bg },
+  bgShapes: { opacity: 0.62 },
+  scroll: { padding: 20, paddingBottom: 34 },
 
-  sectionLabel: { fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text4, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, marginTop: 4 },
-  section:      { backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border2, marginBottom: 16, overflow: "hidden" },
-  divider:      { height: 1, backgroundColor: colors.border2, marginHorizontal: 16 },
+  headRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  back: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.64)" },
+  backText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 12 },
+  badge: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
 
-  row:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 },
-  rowLeft:      { flexDirection: "row", alignItems: "center", gap: 12 },
-  rowIcon:      { fontSize: 18, width: 24, textAlign: "center" },
-  rowLabel:     { fontFamily: "Inter_500Medium", fontSize: 15, color: colors.text },
-  rowValue:     { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text3 },
-  chevron:      { fontSize: 20, color: colors.text4 },
+  title: { fontFamily: "Poppins_900Black", fontSize: 34, color: colors.text, marginBottom: 6 },
+  sub: { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text3, lineHeight: 21, marginBottom: 16 },
 
-  version:      { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.text4, textAlign: "center", marginTop: 8, marginBottom: 32 },
+  section: { borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.card, borderRadius: 18, padding: 14, marginBottom: 12 },
+  sectionLabel: { fontFamily: "Inter_700Bold", color: colors.text3, textTransform: "uppercase", letterSpacing: 1, fontSize: 11, marginBottom: 7 },
+  divider: { height: 1, backgroundColor: colors.border2, marginHorizontal: 2 },
+
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 13, gap: 10 },
+  rowLabel: { fontFamily: "Inter_500Medium", color: colors.text, fontSize: 15, flex: 1 },
+  rowLabelDanger: { color: colors.error },
+  rowValue: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 13, maxWidth: "60%" },
+  rowChevron: { fontFamily: "Inter_700Bold", color: colors.text4, fontSize: 17 },
+
+  version: { fontFamily: "Inter_500Medium", color: colors.text4, textAlign: "center", marginTop: 6, fontSize: 12 },
 });

@@ -5,61 +5,79 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
 import { api } from "../api";
+import StaggerReveal from "../components/StaggerReveal";
+import InteractiveButton from "../components/InteractiveButton";
+import BrandShapes from "../components/BrandShapes";
 
 export default function AuthScreen({ navigation, route }) {
-  const [mode, setMode]   = useState(route.params?.mode || "login");
-  const [form, setForm]   = useState({ email: "", password: "", fullName: "", confirmPassword: "" });
+  const [mode, setMode] = useState(route.params?.mode || "login");
+  const [form, setForm] = useState({ email: "", password: "", fullName: "", confirmPassword: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [resetMode, setResetMode]     = useState(false);
-  const [resetStep, setResetStep]     = useState(1);
-  const [resetToken, setResetToken]   = useState("");
-  const [resetEmail, setResetEmail]   = useState("");
+  const [resetMode, setResetMode] = useState(false);
+  const [resetStep, setResetStep] = useState(1);
+  const [resetToken, setResetToken] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [resetDone, setResetDone]     = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
-  const set = (key) => (val) => { setForm(p => ({ ...p, [key]: val })); setError(""); };
+  const set = (key) => (val) => {
+    setForm((p) => ({ ...p, [key]: val }));
+    setError("");
+  };
 
   const handleForgotPassword = async () => {
     if (!resetEmail.includes("@")) return setError("Enter a valid email.");
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
       const data = await api.forgotPassword(resetEmail.trim().toLowerCase());
-      if (data.reset_token) setResetToken(data.reset_token); // dev: token returned directly
+      if (data.reset_token) setResetToken(data.reset_token);
       setResetStep(2);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResetPassword = async () => {
     if (newPassword.length < 6) return setError("Password must be at least 6 characters.");
     if (!resetToken.trim()) return setError("Enter the reset token.");
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
       await api.resetPassword(resetToken.trim(), newPassword);
       setResetDone(true);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
     setError("");
     if (mode === "signup") {
-      if (!form.fullName.trim())                         return setError("Please enter your name.");
-      if (form.password.length < 6)                     return setError("Password must be at least 6 characters.");
-      if (form.password !== form.confirmPassword)        return setError("Passwords do not match.");
+      if (!form.fullName.trim()) return setError("Please enter your name.");
+      if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+      if (form.password !== form.confirmPassword) return setError("Passwords do not match.");
     }
-    if (!form.email.includes("@"))                       return setError("Enter a valid email address.");
+    if (!form.email.includes("@")) return setError("Enter a valid email address.");
 
     setLoading(true);
     try {
-      const data = mode === "login"
-        ? await api.login({ email: form.email, password: form.password })
-        : await api.register({ email: form.email, password: form.password, full_name: form.fullName });
+      const data =
+        mode === "login"
+          ? await api.login({ email: form.email, password: form.password })
+          : await api.register({ email: form.email, password: form.password, full_name: form.fullName });
 
       await AsyncStorage.setItem("st_token", data.access_token);
-      await AsyncStorage.setItem("st_user", JSON.stringify({ id: data.user_id, email: data.email, name: data.full_name, plan: data.plan }));
+      await AsyncStorage.setItem(
+        "st_user",
+        JSON.stringify({ id: data.user_id, email: data.email, name: data.full_name, plan: data.plan })
+      );
 
       navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
     } catch (err) {
@@ -71,156 +89,185 @@ export default function AuthScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={s.safe}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+      <LinearGradient colors={["#fdf7eb", "#f6f3ea"]} style={s.bg}>
+        <BrandShapes variant="auth" />
 
-          <TouchableOpacity style={s.back} onPress={() => navigation.navigate("Landing")}>
-            <Text style={s.backText}>← Back to Home</Text>
-          </TouchableOpacity>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+            <TouchableOpacity style={s.back} onPress={() => navigation.navigate("Landing")} hitSlop={8}>
+              <Text style={s.backText}>Back to Home</Text>
+            </TouchableOpacity>
 
-          <View style={s.card}>
-            {/* Logo */}
-            <View style={s.logo}>
-              <Text style={s.logoIcon}>💳</Text>
-              <Text style={s.logoText}>SubTrack</Text>
-            </View>
-
-            {/* Mode tabs */}
-            <View style={s.tabs}>
-              {["login", "signup"].map(m => (
-                <TouchableOpacity key={m} style={[s.tab, mode === m && s.tabActive]} onPress={() => { setMode(m); setError(""); }}>
-                  {mode === m
-                    ? <LinearGradient colors={[colors.primary, "#ec4899"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.tabGrad}>
-                        <Text style={s.tabActiveText}>{m === "login" ? "Log In" : "Sign Up"}</Text>
-                      </LinearGradient>
-                    : <Text style={s.tabText}>{m === "login" ? "Log In" : "Sign Up"}</Text>
-                  }
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={s.title}>{mode === "login" ? "Welcome back 👋" : "Start tracking for free 🚀"}</Text>
-            <Text style={s.subtitle}>{mode === "login" ? "Log in to your SubTrack account" : "Create your free account — no credit card needed"}</Text>
-
-            {error ? (
-              <View style={s.errorBox}>
-                <Text style={s.errorText}>⚠️  {error}</Text>
+            <StaggerReveal style={s.card} delay={80} profile="gentle">
+              <View style={s.logoRow}>
+                <View style={s.logoBadge}><Text style={s.logoBadgeText}>S</Text></View>
+                <Text style={s.logoText}>SubTrack</Text>
               </View>
-            ) : null}
 
-            {mode === "signup" && (
+              <View style={s.tabs}>
+                {["login", "signup"].map((m) => (
+                  <TouchableOpacity key={m} style={s.tabBtn} onPress={() => { setMode(m); setError(""); }} hitSlop={8}>
+                    <LinearGradient
+                      colors={mode === m ? [colors.primary, "#1f7a73"] : ["transparent", "transparent"]}
+                      style={[s.tabSurface, mode !== m && s.tabInactive]}
+                    >
+                      <Text style={[s.tabText, mode === m ? s.tabTextActive : null]}>{m === "login" ? "Log In" : "Sign Up"}</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.title}>{mode === "login" ? "Welcome back" : "Create your account"}</Text>
+              <Text style={s.subtitle}>{mode === "login" ? "Access your dashboard and renewals." : "Start tracking subscriptions in under one minute."}</Text>
+
+              {error ? (
+                <View style={s.errorBox}>
+                  <Text style={s.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              {mode === "signup" && (
+                <View style={s.field}>
+                  <Text style={s.label}>Full Name</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="Your name"
+                    placeholderTextColor={colors.text4}
+                    value={form.fullName}
+                    onChangeText={set("fullName")}
+                    autoCapitalize="words"
+                  />
+                </View>
+              )}
+
               <View style={s.field}>
-                <Text style={s.label}>Full Name</Text>
+                <Text style={s.label}>Email</Text>
                 <TextInput
-                  style={s.input} placeholder="Your name" placeholderTextColor={colors.text4}
-                  value={form.fullName} onChangeText={set("fullName")} autoCapitalize="words"
-                />
-              </View>
-            )}
-
-            <View style={s.field}>
-              <Text style={s.label}>Email</Text>
-              <TextInput
-                style={s.input} placeholder="you@example.com" placeholderTextColor={colors.text4}
-                value={form.email} onChangeText={set("email")}
-                autoCapitalize="none" keyboardType="email-address" autoComplete="email"
-              />
-            </View>
-
-            <View style={s.field}>
-              <Text style={s.label}>Password</Text>
-              <View style={s.passRow}>
-                <TextInput
-                  style={[s.input, { flex: 1, paddingRight: 44 }]}
-                  placeholder={mode === "login" ? "Your password" : "At least 6 characters"}
+                  style={s.input}
+                  placeholder="you@example.com"
                   placeholderTextColor={colors.text4}
-                  value={form.password} onChangeText={set("password")}
-                  secureTextEntry={!showPass} autoCapitalize="none"
+                  value={form.email}
+                  onChangeText={set("email")}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
                 />
-                <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPass(p => !p)}>
-                  <Text style={{ fontSize: 16 }}>{showPass ? "🙈" : "👁️"}</Text>
+              </View>
+
+              <View style={s.field}>
+                <Text style={s.label}>Password</Text>
+                <View style={s.passWrap}>
+                  <TextInput
+                    style={[s.input, { flex: 1, paddingRight: 56 }]}
+                    placeholder={mode === "login" ? "Your password" : "At least 6 characters"}
+                    placeholderTextColor={colors.text4}
+                    value={form.password}
+                    onChangeText={set("password")}
+                    secureTextEntry={!showPass}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPass((p) => !p)} hitSlop={8}>
+                    <Text style={s.eyeText}>{showPass ? "Hide" : "Show"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {mode === "login" && (
+                <TouchableOpacity onPress={() => { setResetMode(true); setResetStep(1); setError(""); setResetDone(false); }} style={s.forgotWrap}>
+                  <Text style={s.forgotText}>Forgot password?</Text>
+                </TouchableOpacity>
+              )}
+
+              {mode === "signup" && (
+                <View style={s.field}>
+                  <Text style={s.label}>Confirm Password</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="Repeat password"
+                    placeholderTextColor={colors.text4}
+                    value={form.confirmPassword}
+                    onChangeText={set("confirmPassword")}
+                    secureTextEntry={!showPass}
+                    autoCapitalize="none"
+                  />
+                </View>
+              )}
+
+              {loading ? (
+                <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.submitBtnLoading}>
+                  <View style={s.submitInner}><ActivityIndicator color="#fff" /></View>
+                </LinearGradient>
+              ) : (
+                <InteractiveButton label={mode === "login" ? "Continue" : "Create Account"} onPress={handleSubmit} style={s.submitBtn} />
+              )}
+
+              <View style={s.switchRow}>
+                <Text style={s.switchText}>{mode === "login" ? "No account yet?" : "Already have an account?"}</Text>
+                <TouchableOpacity onPress={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} hitSlop={8}>
+                  <Text style={s.switchLink}>{mode === "login" ? "Sign up" : "Log in"}</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </StaggerReveal>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
 
-            {mode === "login" && (
-              <TouchableOpacity
-                onPress={() => { setResetMode(true); setResetStep(1); setError(""); setResetDone(false); }}
-                style={{ alignSelf: "flex-end", marginBottom: 8, marginTop: -4 }}
-              >
-                <Text style={s.switchLink}>Forgot password?</Text>
-              </TouchableOpacity>
-            )}
-
-            {mode === "signup" && (
-              <View style={s.field}>
-                <Text style={s.label}>Confirm Password</Text>
-                <TextInput
-                  style={s.input} placeholder="Repeat password" placeholderTextColor={colors.text4}
-                  value={form.confirmPassword} onChangeText={set("confirmPassword")}
-                  secureTextEntry={!showPass} autoCapitalize="none"
-                />
-              </View>
-            )}
-
-            <LinearGradient
-              colors={loading ? ["rgba(124,58,237,0.5)", "rgba(6,182,212,0.5)"] : [colors.primary, colors.cyan]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={s.submitBtn}
-            >
-              <TouchableOpacity style={s.submitInner} onPress={handleSubmit} disabled={loading}>
-                {loading
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={s.submitText}>{mode === "login" ? "🔑  Log In" : "🚀  Create Free Account"}</Text>
-                }
-              </TouchableOpacity>
-            </LinearGradient>
-
-            <View style={s.switchRow}>
-              <Text style={s.switchText}>
-                {mode === "login" ? "Don't have an account? " : "Already have an account? "}
-              </Text>
-              <TouchableOpacity onPress={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }}>
-                <Text style={s.switchLink}>{mode === "login" ? "Sign up free" : "Log in"}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Forgot Password Modal */}
       <Modal visible={resetMode} animationType="slide" transparent>
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
-            <Text style={s.title}>{resetDone ? "✅ Done!" : resetStep === 1 ? "Forgot Password" : "Set New Password"}</Text>
-
-            {error ? <View style={s.errorBox}><Text style={s.errorText}>⚠️  {error}</Text></View> : null}
+            <Text style={s.modalTitle}>{resetDone ? "Password updated" : resetStep === 1 ? "Reset your password" : "Set a new password"}</Text>
+            {error ? (
+              <View style={s.errorBox}>
+                <Text style={s.errorText}>{error}</Text>
+              </View>
+            ) : null}
 
             {resetDone ? (
               <>
-                <Text style={[s.subtitle, { marginBottom: 24 }]}>Your password has been updated. Log in with your new password.</Text>
-                <TouchableOpacity style={s.freeBtn} onPress={() => { setResetMode(false); setMode("login"); setResetDone(false); setResetStep(1); }}>
-                  <Text style={s.freeBtnText}>Back to Log In</Text>
+                <Text style={s.modalSub}>You can now sign in with your new password.</Text>
+                <TouchableOpacity style={s.outlineBtn} onPress={() => { setResetMode(false); setMode("login"); setResetDone(false); setResetStep(1); }}>
+                  <Text style={s.outlineBtnText}>Back to Log In</Text>
                 </TouchableOpacity>
               </>
             ) : resetStep === 1 ? (
               <>
-                <Text style={[s.subtitle, { marginBottom: 16 }]}>Enter your email and we'll send a reset token.</Text>
-                <TextInput style={s.input} placeholder="you@example.com" placeholderTextColor={colors.text4} value={resetEmail} onChangeText={(v) => { setResetEmail(v); setError(""); }} autoCapitalize="none" keyboardType="email-address" />
-                <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.submitBtn, { marginTop: 16 }]}>
+                <Text style={s.modalSub}>Enter your email and we will send a reset token.</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="you@example.com"
+                  placeholderTextColor={colors.text4}
+                  value={resetEmail}
+                  onChangeText={(v) => { setResetEmail(v); setError(""); }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <LinearGradient colors={[colors.primary, "#1f7a73"]} style={[s.submitBtn, { marginTop: 16 }]}>
                   <TouchableOpacity style={s.submitInner} onPress={handleForgotPassword} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>Send Reset Token</Text>}
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>Send Token</Text>}
                   </TouchableOpacity>
                 </LinearGradient>
               </>
             ) : (
               <>
-                <Text style={[s.subtitle, { marginBottom: 16 }]}>Enter the token from your email and your new password.</Text>
-                <Text style={s.label}>Reset Token</Text>
-                <TextInput style={[s.input, { marginBottom: 12 }]} placeholder="Paste token here" placeholderTextColor={colors.text4} value={resetToken} onChangeText={(v) => { setResetToken(v); setError(""); }} autoCapitalize="none" />
-                <Text style={s.label}>New Password</Text>
-                <TextInput style={[s.input, { marginBottom: 4 }]} placeholder="At least 6 characters" placeholderTextColor={colors.text4} value={newPassword} onChangeText={(v) => { setNewPassword(v); setError(""); }} secureTextEntry autoCapitalize="none" />
-                <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.submitBtn, { marginTop: 16 }]}>
+                <Text style={s.modalSub}>Paste your token and choose a stronger password.</Text>
+                <TextInput
+                  style={[s.input, { marginBottom: 12 }]}
+                  placeholder="Reset token"
+                  placeholderTextColor={colors.text4}
+                  value={resetToken}
+                  onChangeText={(v) => { setResetToken(v); setError(""); }}
+                  autoCapitalize="none"
+                />
+                <TextInput
+                  style={s.input}
+                  placeholder="New password"
+                  placeholderTextColor={colors.text4}
+                  value={newPassword}
+                  onChangeText={(v) => { setNewPassword(v); setError(""); }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+                <LinearGradient colors={[colors.primary, "#1f7a73"]} style={[s.submitBtn, { marginTop: 16 }]}>
                   <TouchableOpacity style={s.submitInner} onPress={handleResetPassword} disabled={loading}>
                     {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>Reset Password</Text>}
                   </TouchableOpacity>
@@ -229,8 +276,8 @@ export default function AuthScreen({ navigation, route }) {
             )}
 
             {!resetDone && (
-              <TouchableOpacity style={{ marginTop: 16, alignItems: "center" }} onPress={() => { setResetMode(false); setError(""); }}>
-                <Text style={s.switchLink}>← Cancel</Text>
+              <TouchableOpacity style={s.cancelWrap} onPress={() => { setResetMode(false); setError(""); }}>
+                <Text style={s.forgotText}>Cancel</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -241,45 +288,55 @@ export default function AuthScreen({ navigation, route }) {
 }
 
 const s = StyleSheet.create({
-  safe:         { flex: 1, backgroundColor: colors.bg },
-  scroll:       { padding: 20, paddingTop: 12 },
-  back:         { paddingVertical: 8, marginBottom: 16 },
-  backText:     { fontFamily: "Inter_500Medium", fontSize: 14, color: colors.text3 },
+  safe: { flex: 1, backgroundColor: colors.bg },
+  bg: { flex: 1 },
+  scroll: { padding: 20, paddingTop: 12 },
+  back: { alignSelf: "flex-start", paddingVertical: 6, paddingHorizontal: 10, backgroundColor: "rgba(255,255,255,0.66)", borderRadius: 999, borderWidth: 1, borderColor: colors.border2, marginBottom: 12 },
+  backText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text2 },
 
-  card:         { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border2, borderRadius: 24, padding: 28 },
-  logo:         { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 24 },
-  logoIcon:     { fontSize: 26 },
-  logoText:     { fontFamily: "Poppins_800ExtraBold", fontSize: 20, color: colors.primaryLight },
+  card: { backgroundColor: "rgba(255,250,240,0.88)", borderWidth: 1, borderColor: colors.border2, borderRadius: 24, padding: 22 },
+  logoRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginBottom: 18 },
+  logoBadge: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginRight: 10 },
+  logoBadgeText: { fontFamily: "Poppins_800ExtraBold", color: "#fff", fontSize: 18 },
+  logoText: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 22 },
 
-  tabs:         { flexDirection: "row", backgroundColor: colors.bg, borderRadius: 12, padding: 4, marginBottom: 24 },
-  tab:          { flex: 1, borderRadius: 9, overflow: "hidden" },
-  tabActive:    {},
-  tabGrad:      { paddingVertical: 10, alignItems: "center", borderRadius: 9 },
-  tabText:      { fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text3, textAlign: "center", paddingVertical: 10 },
-  tabActiveText:{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#fff" },
+  tabs: { flexDirection: "row", borderRadius: 12, backgroundColor: "rgba(255,255,255,0.7)", borderWidth: 1, borderColor: colors.border2, padding: 4, marginBottom: 16 },
+  tabBtn: { flex: 1 },
+  tabSurface: { borderRadius: 8, alignItems: "center", paddingVertical: 10 },
+  tabInactive: { backgroundColor: "transparent" },
+  tabText: { fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text3 },
+  tabTextActive: { color: "#fff" },
 
-  title:        { fontFamily: "Poppins_800ExtraBold", fontSize: 22, color: colors.text, textAlign: "center", marginBottom: 6 },
-  subtitle:     { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text3, textAlign: "center", marginBottom: 24 },
+  title: { fontFamily: "Poppins_800ExtraBold", fontSize: 26, color: colors.text, textAlign: "center" },
+  subtitle: { fontFamily: "Inter_400Regular", color: colors.text3, textAlign: "center", fontSize: 14, marginTop: 5, marginBottom: 18 },
 
-  errorBox:     { backgroundColor: "rgba(239,68,68,0.1)", borderWidth: 1, borderColor: "rgba(239,68,68,0.3)", borderRadius: 10, padding: 12, marginBottom: 16 },
-  errorText:    { fontFamily: "Inter_500Medium", fontSize: 13, color: "#fca5a5" },
+  errorBox: { borderRadius: 12, padding: 11, borderWidth: 1, borderColor: "rgba(220,38,38,0.25)", backgroundColor: "rgba(220,38,38,0.08)", marginBottom: 14 },
+  errorText: { fontFamily: "Inter_500Medium", color: colors.error, fontSize: 13 },
 
-  field:        { marginBottom: 16 },
-  label:        { fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text3, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
-  input:        { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border2, borderRadius: 10, padding: 13, fontSize: 15, color: colors.text, fontFamily: "Inter_400Regular" },
-  passRow:      { flexDirection: "row", position: "relative" },
-  eyeBtn:       { position: "absolute", right: 12, top: 13, zIndex: 1 },
+  field: { marginBottom: 14 },
+  label: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12, marginBottom: 6 },
+  input: { backgroundColor: "rgba(255,255,255,0.72)", borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 12, fontFamily: "Inter_400Regular", color: colors.text, fontSize: 15 },
+  passWrap: { position: "relative" },
+  eyeBtn: { position: "absolute", right: 10, top: 11, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(15,23,42,0.07)" },
+  eyeText: { fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text3 },
 
-  submitBtn:    { borderRadius: 12, marginTop: 8 },
-  submitInner:  { paddingVertical: 15, alignItems: "center" },
-  submitText:   { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" },
+  forgotWrap: { alignSelf: "flex-end", marginTop: -6, marginBottom: 8 },
+  forgotText: { fontFamily: "Inter_600SemiBold", color: colors.primaryLight, fontSize: 13 },
 
-  switchRow:    { flexDirection: "row", justifyContent: "center", marginTop: 20, flexWrap: "wrap" },
-  switchText:   { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text4 },
-  switchLink:   { fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.primaryLight },
+  submitBtn: { marginTop: 4 },
+  submitBtnLoading: { borderRadius: 13, marginTop: 4 },
+  submitInner: { paddingVertical: 14, alignItems: "center" },
+  submitText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 15 },
 
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modalCard:    { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 48 },
-  freeBtn:      { borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 8 },
-  freeBtnText:  { fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text2 },
+  switchRow: { marginTop: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 },
+  switchText: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 13 },
+  switchLink: { fontFamily: "Inter_700Bold", color: colors.primaryLight, fontSize: 13 },
+
+  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(15,23,42,0.38)" },
+  modalCard: { backgroundColor: colors.bg2, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 34 },
+  modalTitle: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 24, marginBottom: 6 },
+  modalSub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 14 },
+  outlineBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 4 },
+  outlineBtnText: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 14 },
+  cancelWrap: { marginTop: 16, alignItems: "center" },
 });

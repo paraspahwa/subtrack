@@ -9,40 +9,33 @@ import SubCard from "../components/SubCard";
 import SubModal from "../components/SubModal";
 import AnalyticsPanel from "../components/AnalyticsPanel";
 import { syncRenewalReminders } from "../notifications";
+import StaggerReveal from "../components/StaggerReveal";
+import InteractiveButton from "../components/InteractiveButton";
+import BrandShapes from "../components/BrandShapes";
 
 const FREE_LIMIT = 10;
 
 export default function DashboardScreen({ navigation }) {
-  const [subs, setSubs]           = useState([]);
+  const [subs, setSubs] = useState([]);
   const [analytics, setAnalytics] = useState(null);
-  const [userInfo, setUserInfo]   = useState(null);
-  const [loading, setLoading]     = useState(true);
+  const [userInfo, setUserInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editSub, setEditSub]     = useState(null);
+  const [editSub, setEditSub] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
   const [filterCat, setFilterCat] = useState("All");
-  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(true);
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [subsData, analyticsData, meData] = await Promise.all([
-        api.listSubs(),
-        api.analytics(),
-        api.me(),
-      ]);
+      const [subsData, analyticsData, meData] = await Promise.all([api.listSubs(), api.analytics(), api.me()]);
       setSubs(subsData);
       setAnalytics(analyticsData);
       setUserInfo(meData);
-      await AsyncStorage.setItem("st_user", JSON.stringify({
-        id: meData.user_id,
-        email: meData.email,
-        name: meData.full_name,
-        plan: meData.plan,
-      }));
+      await AsyncStorage.setItem("st_user", JSON.stringify({ id: meData.user_id, email: meData.email, name: meData.full_name, plan: meData.plan }));
 
-      // Sync local push reminders if user enabled them in Settings.
       const notificationsEnabled = await AsyncStorage.getItem("st_notifications");
       if (notificationsEnabled === "true") {
         const reminderData = await api.reminderCandidates(30);
@@ -59,7 +52,9 @@ export default function DashboardScreen({ navigation }) {
     }
   }, [navigation]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const handleLogout = async () => {
     await AsyncStorage.multiRemove(["st_token", "st_user"]);
@@ -70,7 +65,8 @@ export default function DashboardScreen({ navigation }) {
     Alert.alert("Delete Subscription", "Are you sure you want to delete this subscription?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Delete", style: "destructive",
+        text: "Delete",
+        style: "destructive",
         onPress: async () => {
           await api.deleteSub(id);
           fetchAll();
@@ -85,10 +81,10 @@ export default function DashboardScreen({ navigation }) {
   };
 
   const handleAdd = () => {
-    const activeCount = subs.filter(s => s.is_active).length;
+    const activeCount = subs.filter((s) => s.is_active).length;
     const isPro = userInfo?.plan !== "free";
     if (!isPro && activeCount >= FREE_LIMIT) {
-      Alert.alert("Free Plan Limit", `Free plan supports up to ${FREE_LIMIT} active subscriptions.\n\nUpgrade to Pro for unlimited.`, [
+      Alert.alert("Free Plan Limit", `Free plan supports up to ${FREE_LIMIT} active subscriptions.`, [
         { text: "Maybe Later", style: "cancel" },
         { text: "See Pricing", onPress: () => navigation.navigate("Pricing") },
       ]);
@@ -104,138 +100,103 @@ export default function DashboardScreen({ navigation }) {
     fetchAll();
   };
 
-  const filteredSubs = subs.filter(s => {
-    if (activeTab === "active"   && !s.is_active) return false;
-    if (activeTab === "inactive" &&  s.is_active) return false;
+  const filteredSubs = subs.filter((s) => {
+    if (activeTab === "active" && !s.is_active) return false;
+    if (activeTab === "inactive" && s.is_active) return false;
     if (filterCat !== "All" && s.category !== filterCat) return false;
     return true;
   });
 
   const isPro = userInfo?.plan !== "free";
-  const activeCount = subs.filter(s => s.is_active).length;
+  const activeCount = subs.filter((s) => s.is_active).length;
   const atLimit = !isPro && activeCount >= FREE_LIMIT;
 
   return (
     <SafeAreaView style={s.safe}>
-      {/* Header */}
-      <View style={s.header}>
-        <View style={s.headerLeft}>
-          <Text style={s.logoIcon}>💳</Text>
-          <Text style={s.logo}>SubTrack</Text>
-          <View style={[s.planBadge, isPro ? s.proBadge : s.freeBadge]}>
-            <Text style={[s.planBadgeText, isPro ? { color: colors.cyan } : { color: colors.primaryLight }]}>
-              {isPro ? "PRO" : "FREE"}
-            </Text>
-          </View>
+      <View style={s.topChrome}>
+        <View>
+          <Text style={s.brand}>SubTrack</Text>
+          <Text style={s.welcome}>{userInfo?.full_name || userInfo?.email || "Your subscription workspace"}</Text>
         </View>
-        <View style={s.headerRight}>
+        <View style={s.topActions}>
           {!isPro && (
-            <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.upgradeBtn}>
-              <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.upgradeBtnGrad}>
-                <Text style={s.upgradeBtnText}>⚡ Pro</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Pricing")} hitSlop={8}>
+              <LinearGradient colors={[colors.primary, "#1f7a73"]} style={s.upgradeBtn}>
+                <Text style={s.upgradeBtnText}>Go Pro</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
-            <Text style={s.logoutText}>Exit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate("Settings")} style={s.logoutBtn}>
-            <Text style={{ fontSize: 20 }}>⚙️</Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("Settings")} style={s.iconBtn} hitSlop={8}><Text style={s.iconTxt}>⚙</Text></TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={s.iconBtn} hitSlop={8}><Text style={s.iconTxt}>↩</Text></TouchableOpacity>
         </View>
       </View>
 
-      <SubModal
-        visible={modalVisible}
-        sub={editSub}
-        onClose={() => { setModalVisible(false); setEditSub(null); }}
-        onSaved={handleSaved}
-      />
+      <SubModal visible={modalVisible} sub={editSub} onClose={() => { setModalVisible(false); setEditSub(null); }} onSaved={handleSaved} />
 
       <ScrollView
         style={s.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(true); }} tintColor={colors.primary} />}
       >
-        {/* Top bar */}
-        <View style={s.topBar}>
-          <View>
-            <Text style={s.pageTitle}>My Subscriptions</Text>
-            <Text style={s.pageSub}>
-              {activeCount} active{!isPro ? ` · ${FREE_LIMIT} max on free` : ""}
-            </Text>
-          </View>
-          <View style={s.topBtns}>
-            <TouchableOpacity onPress={() => setShowAnalytics(v => !v)} style={[s.analyticsBtn, showAnalytics && s.analyticsBtnActive]}>
-              <Text style={[s.analyticsBtnText, showAnalytics && { color: colors.cyan }]}>📊</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleAdd} style={s.addBtnWrap}>
-              <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.addBtn}>
-                <Text style={s.addBtnText}>+ Add</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Free limit banner */}
-        {atLimit && (
-          <View style={s.limitBanner}>
+        <StaggerReveal delay={70} profile="snappy">
+          <LinearGradient colors={["#fff8eb", "#f6f3ea"]} style={s.heroCard}>
+          <BrandShapes variant="dashboard" style={s.heroShapes} />
+          <View style={s.heroRow}>
             <View>
-              <Text style={s.limitTitle}>Free plan limit reached</Text>
-              <Text style={s.limitSub}>Upgrade to Pro for unlimited subscriptions.</Text>
+              <Text style={s.heroTitle}>My subscriptions</Text>
+              <Text style={s.heroSub}>{activeCount} active{!isPro ? ` • ${FREE_LIMIT} max on free` : " • Unlimited on Pro"}</Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.limitBtn}>
-              <Text style={s.limitBtnText}>Upgrade</Text>
-            </TouchableOpacity>
+            <View style={s.heroActions}>
+              <TouchableOpacity onPress={() => setShowAnalytics((v) => !v)} style={[s.toggleBtn, showAnalytics && s.toggleBtnActive]} hitSlop={8}>
+                <Text style={[s.toggleBtnText, showAnalytics && s.toggleBtnTextActive]}>Insights</Text>
+              </TouchableOpacity>
+              <InteractiveButton label="+ Add" onPress={handleAdd} style={s.addWrap} textStyle={s.addTxt} />
+            </View>
           </View>
-        )}
 
-        {/* Analytics panel */}
+          {atLimit && (
+            <View style={s.limitBanner}>
+              <Text style={s.limitTxt}>Free limit reached. Upgrade for unlimited tracking.</Text>
+              <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.limitCta} hitSlop={8}><Text style={s.limitCtaTxt}>Upgrade</Text></TouchableOpacity>
+            </View>
+          )}
+          </LinearGradient>
+        </StaggerReveal>
+
         {showAnalytics && (
-          <View style={s.analyticsPanel}>
+          <StaggerReveal style={s.analyticsWrap} delay={130} profile="smooth">
             <AnalyticsPanel analytics={analytics} />
-          </View>
+          </StaggerReveal>
         )}
 
-        {/* Filters */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filters} contentContainerStyle={s.filtersContent}>
-          {["all", "active", "inactive"].map(tab => (
-            <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[s.filterChip, activeTab === tab && s.filterChipActive]}>
-              <Text style={[s.filterChipText, activeTab === tab && s.filterChipActiveText]}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filters} contentContainerStyle={s.filtersInner}>
+          {["all", "active", "inactive"].map((tab) => (
+            <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[s.chip, activeTab === tab && s.chipActive]}>
+              <Text style={[s.chipText, activeTab === tab && s.chipTextActive]}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</Text>
             </TouchableOpacity>
           ))}
-          <View style={s.filterDivider} />
-          {["All", ...CATEGORIES].map(cat => (
-            <TouchableOpacity key={cat} onPress={() => setFilterCat(cat)} style={[s.filterChip, filterCat === cat && s.filterChipActive]}>
-              <Text style={[s.filterChipText, filterCat === cat && s.filterChipActiveText]}>{cat}</Text>
+          <View style={s.divider} />
+          {["All", ...CATEGORIES].map((cat) => (
+            <TouchableOpacity key={cat} onPress={() => setFilterCat(cat)} style={[s.chip, filterCat === cat && s.chipActive]}>
+              <Text style={[s.chipText, filterCat === cat && s.chipTextActive]}>{cat}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Content */}
         {loading ? (
-          <View style={s.center}>
-            <ActivityIndicator color={colors.primary} size="large" />
-          </View>
+          <View style={s.center}><ActivityIndicator color={colors.primary} size="large" /></View>
         ) : filteredSubs.length === 0 ? (
-          <View style={s.empty}>
-            <Text style={s.emptyIcon}>💳</Text>
+          <StaggerReveal style={s.empty} delay={190} profile="smooth">
             <Text style={s.emptyTitle}>{subs.length === 0 ? "No subscriptions yet" : "No matches"}</Text>
-            <Text style={s.emptySub}>{subs.length === 0 ? "Tap + Add to track your first subscription." : "Try changing the filter."}</Text>
+            <Text style={s.emptySub}>{subs.length === 0 ? "Add your first subscription to start tracking." : "Try a different filter."}</Text>
             {subs.length === 0 && (
-              <TouchableOpacity onPress={handleAdd} style={s.emptyAddBtnWrap}>
-                <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.emptyAddBtn}>
-                  <Text style={s.emptyAddBtnText}>+ Add First Subscription</Text>
-                </LinearGradient>
+              <TouchableOpacity onPress={handleAdd} hitSlop={8}>
+                <LinearGradient colors={[colors.primary, "#1f7a73"]} style={s.emptyBtn}><Text style={s.emptyBtnText}>Add First Subscription</Text></LinearGradient>
               </TouchableOpacity>
             )}
-          </View>
+          </StaggerReveal>
         ) : (
-          <View style={s.list}>
-            {filteredSubs.map(sub => (
-              <SubCard key={sub.id} sub={sub} onEdit={handleEdit} onDelete={handleDelete} />
-            ))}
-          </View>
+          <StaggerReveal style={s.list} delay={190} profile="smooth">{filteredSubs.map((sub) => <SubCard key={sub.id} sub={sub} onEdit={handleEdit} onDelete={handleDelete} />)}</StaggerReveal>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -243,60 +204,72 @@ export default function DashboardScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe:         { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1, backgroundColor: colors.bg },
+  topChrome: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: colors.bg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border2,
+  },
+  brand: { fontFamily: "Poppins_800ExtraBold", fontSize: 24, color: colors.text },
+  welcome: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3, marginTop: 2, maxWidth: 190 },
+  topActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  upgradeBtn: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9 },
+  upgradeBtnText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 12 },
+  iconBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 10, width: 36, height: 36, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.6)" },
+  iconTxt: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 15 },
 
-  header:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border2, backgroundColor: colors.bg },
-  headerLeft:   { flexDirection: "row", alignItems: "center", gap: 8 },
-  logoIcon:     { fontSize: 20 },
-  logo:         { fontFamily: "Poppins_800ExtraBold", fontSize: 18, color: colors.primaryLight },
-  planBadge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  freeBadge:    { borderColor: "rgba(124,58,237,0.3)", backgroundColor: "rgba(124,58,237,0.1)" },
-  proBadge:     { borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.1)" },
-  planBadgeText:{ fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.5 },
-  headerRight:  { flexDirection: "row", alignItems: "center", gap: 8 },
-  upgradeBtn:   { borderRadius: 8, overflow: "hidden" },
-  upgradeBtnGrad:{ paddingHorizontal: 12, paddingVertical: 7 },
-  upgradeBtnText:{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#fff" },
-  logoutBtn:    { borderWidth: 1, borderColor: colors.border2, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
-  logoutText:   { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text4 },
+  scroll: { flex: 1 },
+  heroCard: { margin: 20, marginBottom: 12, borderRadius: 22, padding: 18, borderWidth: 1, borderColor: colors.border2, overflow: "hidden" },
+  heroShapes: { opacity: 0.65 },
+  heroRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  heroTitle: { fontFamily: "Poppins_800ExtraBold", fontSize: 27, color: colors.text },
+  heroSub: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3, marginTop: 4 },
+  heroActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  toggleBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.67)" },
+  toggleBtnActive: { borderColor: colors.primary, backgroundColor: "rgba(18,94,89,0.10)" },
+  toggleBtnText: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12 },
+  toggleBtnTextActive: { color: colors.primary },
+  addWrap: { minWidth: 86 },
+  addTxt: { fontSize: 13 },
 
-  scroll:       { flex: 1 },
+  limitBanner: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(194,65,12,0.23)",
+    backgroundColor: "rgba(194,65,12,0.08)",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  limitTxt: { fontFamily: "Inter_500Medium", color: colors.warning, fontSize: 12, flex: 1 },
+  limitCta: { borderRadius: 8, backgroundColor: colors.warning, paddingHorizontal: 10, paddingVertical: 8 },
+  limitCtaTxt: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 12 },
 
-  topBar:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, paddingBottom: 12 },
-  pageTitle:    { fontFamily: "Poppins_800ExtraBold", fontSize: 22, color: colors.text },
-  pageSub:      { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text3, marginTop: 2 },
-  topBtns:      { flexDirection: "row", gap: 8, alignItems: "center" },
-  analyticsBtn: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: colors.border2, alignItems: "center", justifyContent: "center", backgroundColor: colors.card },
-  analyticsBtnActive: { borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.1)" },
-  analyticsBtnText:   { fontSize: 18 },
-  addBtnWrap:   { borderRadius: 10, overflow: "hidden" },
-  addBtn:       { paddingHorizontal: 18, paddingVertical: 10 },
-  addBtnText:   { fontFamily: "Inter_700Bold", fontSize: 14, color: "#fff" },
+  analyticsWrap: { paddingHorizontal: 20, marginBottom: 6 },
 
-  limitBanner:  { marginHorizontal: 20, marginBottom: 12, backgroundColor: "rgba(124,58,237,0.1)", borderWidth: 1, borderColor: "rgba(124,58,237,0.3)", borderRadius: 14, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  limitTitle:   { fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.primaryLight },
-  limitSub:     { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.text3, marginTop: 2 },
-  limitBtn:     { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, flexShrink: 0 },
-  limitBtnText: { fontFamily: "Inter_700Bold", fontSize: 13, color: "#fff" },
+  filters: { marginBottom: 8 },
+  filtersInner: { paddingHorizontal: 20, gap: 8, alignItems: "center" },
+  chip: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.68)" },
+  chipActive: { borderColor: colors.primary, backgroundColor: "rgba(18,94,89,0.11)" },
+  chipText: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3 },
+  chipTextActive: { color: colors.primary, fontFamily: "Inter_700Bold" },
+  divider: { width: 1, height: 24, backgroundColor: colors.border2, marginHorizontal: 2 },
 
-  analyticsPanel:{ paddingHorizontal: 20, marginBottom: 4 },
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 80 },
+  empty: { marginHorizontal: 20, marginTop: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.card, padding: 24, alignItems: "center" },
+  emptyTitle: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 24, textAlign: "center" },
+  emptySub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, textAlign: "center", lineHeight: 20, marginTop: 8, marginBottom: 16 },
+  emptyBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  emptyBtnText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 14 },
 
-  filters:      { paddingBottom: 8 },
-  filtersContent:{ paddingHorizontal: 20, gap: 8, paddingVertical: 4 },
-  filterChip:   { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.card },
-  filterChipActive:{ borderColor: "rgba(124,58,237,0.4)", backgroundColor: "rgba(124,58,237,0.12)" },
-  filterChipText:{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.text3 },
-  filterChipActiveText: { color: colors.primaryLight, fontFamily: "Inter_600SemiBold" },
-  filterDivider:{ width: 1, backgroundColor: colors.border2, marginHorizontal: 4 },
-
-  center:       { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 80 },
-  empty:        { alignItems: "center", padding: 40, paddingTop: 60 },
-  emptyIcon:    { fontSize: 48, marginBottom: 12 },
-  emptyTitle:   { fontFamily: "Poppins_800ExtraBold", fontSize: 20, color: colors.text, marginBottom: 8, textAlign: "center" },
-  emptySub:     { fontFamily: "Inter_400Regular", fontSize: 15, color: colors.text3, textAlign: "center", marginBottom: 28 },
-  emptyAddBtnWrap: { borderRadius: 12, overflow: "hidden" },
-  emptyAddBtn:  { paddingHorizontal: 28, paddingVertical: 14 },
-  emptyAddBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
-
-  list:         { paddingHorizontal: 20, paddingBottom: 32 },
+  list: { paddingHorizontal: 20, paddingBottom: 30 },
 });
