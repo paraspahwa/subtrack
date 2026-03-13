@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # ─────────────────────────────────────────────
-# StudyQuizAI — One-command setup script
+# SubTrack — One-command setup script
 # ─────────────────────────────────────────────
 
 set -e
 
-echo "⚡ StudyQuizAI — Setup"
+echo "⚡ SubTrack — Setup"
 echo "═══════════════════════════════════════"
 
 # ── Check prerequisites ──────────────────────
@@ -36,10 +36,11 @@ if [ ! -f .env ]; then
     cp .env.example .env
     echo "📄 Created .env from .env.example"
     echo ""
-    echo "⚠️  IMPORTANT: Edit .env and add your API keys:"
-    echo "   • OPENAI_API_KEY     → https://platform.openai.com/api-keys"
+    echo "⚠️  IMPORTANT: Edit .env and add your keys:"
+    echo "   • DATABASE_URL       → Supabase: Settings > Database > Connection string (Session mode)"
     echo "   • RAZORPAY_KEY_ID    → https://dashboard.razorpay.com/app/keys"
     echo "   • RAZORPAY_KEY_SECRET"
+    echo "   • SECRET_KEY         → Run: openssl rand -hex 32"
     echo ""
     read -p "Have you added your API keys to .env? (y/n): " -n 1 -r
     echo ""
@@ -51,38 +52,31 @@ else
     echo "✅ .env already exists"
 fi
 
-# ── Setup frontend .env ─────────────────────
-if [ ! -f frontend/.env ]; then
-    cp frontend/.env.example frontend/.env
-    echo "📄 Created frontend/.env"
-fi
-
 # ── Build and run ────────────────────────────
 echo ""
 echo "🏗️  Building containers..."
 docker compose build
 
 echo ""
-echo "🚀 Starting StudyQuizAI..."
+echo "🚀 Starting SubTrack..."
 docker compose up -d
 
 echo ""
 echo "═══════════════════════════════════════"
-echo "✅ StudyQuizAI is running!"
+echo "✅ SubTrack is running!"
 echo ""
-echo "   🌐 App:     http://localhost:3000"
-echo "   🔌 API:     http://localhost:8000"
-echo "   💚 Health:  http://localhost:8000/health"
+echo "   🌐 Web App:  http://localhost:3000"
+echo "   🔌 API:      http://localhost:8000"
+echo "   💚 Health:   http://localhost:8000/health"
+echo "   📖 API Docs: http://localhost:8000/docs"
 echo ""
-echo "📋 Next steps:"
-echo "   1. Create subscription plans:"
-echo "      curl -X POST http://localhost:8000/payment/create-plan"
+echo "📱 Mobile (React Native + Expo):"
+echo "   cd frontend && npm install && npx expo start"
+echo "   Scan the QR code with Expo Go (iOS/Android)"
 echo ""
-echo "   2. Copy the plan IDs to frontend/.env:"
-echo "      VITE_RAZORPAY_MONTHLY_PLAN_ID=plan_xxxxx"
-echo "      VITE_RAZORPAY_YEARLY_PLAN_ID=plan_yyyyy"
-echo ""
-echo "   3. Rebuild frontend: docker compose up -d --build frontend"
+echo "📋 Production builds:"
+echo "   eas build --platform android"
+echo "   eas build --platform ios"
 echo ""
 echo "═══════════════════════════════════════"
 echo "   To stop: docker compose down"

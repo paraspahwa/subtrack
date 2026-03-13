@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node / Expo
+node_modules/
+frontend/node_modules/
+.expo/
+.expo-shared/
+
+# Build artifacts
+build/
+dist/
+coverage/
+frontend/web-build/
+
+# OS / editor
+.DS_Store
+.vscode/

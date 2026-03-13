@@ -1,6 +1,4 @@
-"""
-Authentication utilities for StudyQuizAI
-"""
+"""Authentication utilities for SubTrack."""
 
 import os
 from datetime import datetime, timedelta
@@ -10,7 +8,7 @@ import jwt
 from fastapi import HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 
-from database import User, SessionLocal
+from database import User, get_db
 
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -43,7 +41,7 @@ def verify_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(lambda: SessionLocal())) -> User:
+def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> User:
     """Dependency to get current authenticated user"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Not authenticated")

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -12,8 +12,36 @@ export default function AuthScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [resetMode, setResetMode]     = useState(false);
+  const [resetStep, setResetStep]     = useState(1);
+  const [resetToken, setResetToken]   = useState("");
+  const [resetEmail, setResetEmail]   = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetDone, setResetDone]     = useState(false);
 
   const set = (key) => (val) => { setForm(p => ({ ...p, [key]: val })); setError(""); };
+
+  const handleForgotPassword = async () => {
+    if (!resetEmail.includes("@")) return setError("Enter a valid email.");
+    setLoading(true); setError("");
+    try {
+      const data = await api.forgotPassword(resetEmail.trim().toLowerCase());
+      if (data.reset_token) setResetToken(data.reset_token); // dev: token returned directly
+      setResetStep(2);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const handleResetPassword = async () => {
+    if (newPassword.length < 6) return setError("Password must be at least 6 characters.");
+    if (!resetToken.trim()) return setError("Enter the reset token.");
+    setLoading(true); setError("");
+    try {
+      await api.resetPassword(resetToken.trim(), newPassword);
+      setResetDone(true);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -115,6 +143,15 @@ export default function AuthScreen({ navigation, route }) {
               </View>
             </View>
 
+            {mode === "login" && (
+              <TouchableOpacity
+                onPress={() => { setResetMode(true); setResetStep(1); setError(""); setResetDone(false); }}
+                style={{ alignSelf: "flex-end", marginBottom: 8, marginTop: -4 }}
+              >
+                <Text style={s.switchLink}>Forgot password?</Text>
+              </TouchableOpacity>
+            )}
+
             {mode === "signup" && (
               <View style={s.field}>
                 <Text style={s.label}>Confirm Password</Text>
@@ -150,6 +187,55 @@ export default function AuthScreen({ navigation, route }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Forgot Password Modal */}
+      <Modal visible={resetMode} animationType="slide" transparent>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.title}>{resetDone ? "✅ Done!" : resetStep === 1 ? "Forgot Password" : "Set New Password"}</Text>
+
+            {error ? <View style={s.errorBox}><Text style={s.errorText}>⚠️  {error}</Text></View> : null}
+
+            {resetDone ? (
+              <>
+                <Text style={[s.subtitle, { marginBottom: 24 }]}>Your password has been updated. Log in with your new password.</Text>
+                <TouchableOpacity style={s.freeBtn} onPress={() => { setResetMode(false); setMode("login"); setResetDone(false); setResetStep(1); }}>
+                  <Text style={s.freeBtnText}>Back to Log In</Text>
+                </TouchableOpacity>
+              </>
+            ) : resetStep === 1 ? (
+              <>
+                <Text style={[s.subtitle, { marginBottom: 16 }]}>Enter your email and we'll send a reset token.</Text>
+                <TextInput style={s.input} placeholder="you@example.com" placeholderTextColor={colors.text4} value={resetEmail} onChangeText={(v) => { setResetEmail(v); setError(""); }} autoCapitalize="none" keyboardType="email-address" />
+                <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.submitBtn, { marginTop: 16 }]}>
+                  <TouchableOpacity style={s.submitInner} onPress={handleForgotPassword} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>Send Reset Token</Text>}
+                  </TouchableOpacity>
+                </LinearGradient>
+              </>
+            ) : (
+              <>
+                <Text style={[s.subtitle, { marginBottom: 16 }]}>Enter the token from your email and your new password.</Text>
+                <Text style={s.label}>Reset Token</Text>
+                <TextInput style={[s.input, { marginBottom: 12 }]} placeholder="Paste token here" placeholderTextColor={colors.text4} value={resetToken} onChangeText={(v) => { setResetToken(v); setError(""); }} autoCapitalize="none" />
+                <Text style={s.label}>New Password</Text>
+                <TextInput style={[s.input, { marginBottom: 4 }]} placeholder="At least 6 characters" placeholderTextColor={colors.text4} value={newPassword} onChangeText={(v) => { setNewPassword(v); setError(""); }} secureTextEntry autoCapitalize="none" />
+                <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.submitBtn, { marginTop: 16 }]}>
+                  <TouchableOpacity style={s.submitInner} onPress={handleResetPassword} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>Reset Password</Text>}
+                  </TouchableOpacity>
+                </LinearGradient>
+              </>
+            )}
+
+            {!resetDone && (
+              <TouchableOpacity style={{ marginTop: 16, alignItems: "center" }} onPress={() => { setResetMode(false); setError(""); }}>
+                <Text style={s.switchLink}>← Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -191,4 +277,9 @@ const s = StyleSheet.create({
   switchRow:    { flexDirection: "row", justifyContent: "center", marginTop: 20, flexWrap: "wrap" },
   switchText:   { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text4 },
   switchLink:   { fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.primaryLight },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
+  modalCard:    { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 48 },
+  freeBtn:      { borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 8 },
+  freeBtnText:  { fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text2 },
 });

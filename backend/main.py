@@ -11,9 +11,13 @@ Subscription tracking app.
 import os
 import hmac
 import hashlib
+import re
 from datetime import datetime, timedelta
 from typing import Optional, List
 from calendar import monthrange
+import csv
+import io
+import secrets as secrets_module
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -25,7 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import init_db, get_db, User, Subscription, Payment, FREE_SUBSCRIPTION_LIMIT
-from auth import create_access_token, get_current_user
+from auth import create_access_token, get_current_user, verify_token
 
 
 # ─────────────────────────────────────────────
@@ -83,6 +87,15 @@ class PaymentVerification(BaseModel):
     razorpay_signature: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
 # ─────────────────────────────────────────────
 # App Setup
 # ─────────────────────────────────────────────
@@ -91,7 +104,7 @@ app = FastAPI(title="SubTrack API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to your domain in production
+    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -100,13 +113,31 @@ app.add_middleware(
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+RETURN_RESET_TOKEN = os.getenv("RETURN_RESET_TOKEN", "false").lower() == "true"
 
 razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_KEY_ID else None
+
+
+def _is_real_payment_key(value: str) -> bool:
+    if not value:
+        return False
+    lowered = value.lower()
+    placeholders = ("xxxx", "change-me", "your_", "example", "test_key")
+    return not any(token in lowered for token in placeholders)
+
+
+def _payment_configured() -> bool:
+    return _is_real_payment_key(RAZORPAY_KEY_ID) and _is_real_payment_key(RAZORPAY_KEY_SECRET)
 
 
 @app.on_event("startup")
 async def startup_event():
     init_db()
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "SubTrack API"}
 
 
 # ─────────────────────────────────────────────
@@ -115,6 +146,8 @@ async def startup_event():
 
 @app.post("/api/auth/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", req.email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
     if db.query(User).filter(User.email == req.email.lower()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     user = User(email=req.email.lower(), full_name=req.full_name)
@@ -167,6 +200,49 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
 # ─────────────────────────────────────────────
 # Subscription CRUD
 # ─────────────────────────────────────────────
+
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email.lower()).first()
+    # Always return 200 to prevent email enumeration
+    if user:
+        token = secrets_module.token_urlsafe(32)
+        user.password_reset_token = token
+        user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        db.commit()
+        # TODO: send token via email (e.g. SendGrid/Resend).
+        if RETURN_RESET_TOKEN:
+            return {"message": "Reset instructions sent.", "reset_token": token}
+        return {"message": "Reset instructions sent."}
+    return {"message": "Reset instructions sent."}
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    user = db.query(User).filter(
+        User.password_reset_token == req.token,
+        User.password_reset_expires > datetime.utcnow(),
+    ).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    user.set_password(req.new_password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
+@app.delete("/api/auth/account")
+def delete_account(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+    return {"message": "Account deleted"}
 
 def _parse_date(date_str: str) -> datetime:
     for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
@@ -228,6 +304,70 @@ def create_subscription(
     db.commit()
     db.refresh(sub)
     return _sub_dict(sub)
+
+
+@app.get("/api/subscriptions/export.csv")
+def export_csv(
+    request: Request,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    from fastapi.responses import StreamingResponse
+
+    # Allow export via either Authorization header (normal API use)
+    # or a query token (mobile deep-link fallback).
+    current_user = None
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        try:
+            scheme, header_token = auth_header.split()
+            if scheme.lower() == "bearer":
+                payload = verify_token(header_token)
+                current_user = db.query(User).filter(User.id == payload["user_id"]).first()
+        except Exception:
+            current_user = None
+
+    if current_user is None and token:
+        try:
+            payload = verify_token(token)
+            current_user = db.query(User).filter(User.id == payload["user_id"]).first()
+        except Exception:
+            current_user = None
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    subs = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id
+    ).order_by(Subscription.next_billing_date.asc()).all()
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=[
+        "name", "category", "amount", "currency", "billing_cycle",
+        "monthly_cost", "next_billing_date", "is_active", "usage_rating",
+        "cancel_url", "notes"
+    ])
+    writer.writeheader()
+    for s in subs:
+        writer.writerow({
+            "name": s.name,
+            "category": s.category,
+            "amount": s.amount,
+            "currency": s.currency,
+            "billing_cycle": s.billing_cycle,
+            "monthly_cost": round(_monthly_cost(s), 2),
+            "next_billing_date": s.next_billing_date.strftime("%Y-%m-%d") if s.next_billing_date else "",
+            "is_active": s.is_active,
+            "usage_rating": s.usage_rating or "",
+            "cancel_url": s.cancel_url or "",
+            "notes": s.notes or "",
+        })
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=subtrack_subscriptions.csv"},
+    )
 
 
 @app.get("/api/subscriptions/{sub_id}")
@@ -339,9 +479,31 @@ def get_analytics(
     }
 
 
+@app.get("/api/reminders/upcoming")
+def upcoming_reminders(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    days = max(1, min(days, 90))
+    now = datetime.utcnow()
+    limit = now + timedelta(days=days)
+    subs = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id,
+        Subscription.is_active == True
+    ).all()
+    items = [
+        _sub_dict(s) for s in subs
+        if s.next_billing_date and now <= s.next_billing_date <= limit
+    ]
+    items.sort(key=lambda x: x["next_billing_date"])
+    return {"days": days, "count": len(items), "items": items}
+
+
 # ─────────────────────────────────────────────
 # Payments (Razorpay)
 # ─────────────────────────────────────────────
+
 
 @app.post("/api/payments/create-order")
 def create_order(
@@ -349,14 +511,17 @@ def create_order(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if not razorpay_client:
+    if not razorpay_client or not _payment_configured():
         raise HTTPException(status_code=503, detail="Payment service not configured")
-    order = razorpay_client.order.create({
-        "amount": req.amount,
-        "currency": req.currency,
-        "payment_capture": 1,
-        "notes": {"user_id": str(current_user.id), "plan": req.plan_type},
-    })
+    try:
+        order = razorpay_client.order.create({
+            "amount": req.amount,
+            "currency": req.currency,
+            "payment_capture": 1,
+            "notes": {"user_id": str(current_user.id), "plan": req.plan_type},
+        })
+    except Exception:
+        raise HTTPException(status_code=502, detail="Payment provider error")
     payment = Payment(
         user_id=current_user.id,
         razorpay_order_id=order["id"],
@@ -366,7 +531,13 @@ def create_order(
     )
     db.add(payment)
     db.commit()
-    return {"order_id": order["id"], "amount": req.amount, "currency": req.currency}
+    return {
+        "razorpay_order_id": order["id"],
+        "key_id": RAZORPAY_KEY_ID,
+        "amount": req.amount,
+        "currency": req.currency,
+        "email": current_user.email,
+    }
 
 
 @app.post("/api/payments/verify")
@@ -375,7 +546,7 @@ def verify_payment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if not razorpay_client:
+    if not razorpay_client or not _payment_configured():
         raise HTTPException(status_code=503, detail="Payment service not configured")
     try:
         razorpay_client.utility.verify_payment_signature({

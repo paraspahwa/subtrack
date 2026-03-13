@@ -8,6 +8,7 @@ import { api } from "../api";
 import SubCard from "../components/SubCard";
 import SubModal from "../components/SubModal";
 import AnalyticsPanel from "../components/AnalyticsPanel";
+import { syncRenewalReminders } from "../notifications";
 
 const FREE_LIMIT = 10;
 
@@ -34,6 +35,19 @@ export default function DashboardScreen({ navigation }) {
       setSubs(subsData);
       setAnalytics(analyticsData);
       setUserInfo(meData);
+      await AsyncStorage.setItem("st_user", JSON.stringify({
+        id: meData.user_id,
+        email: meData.email,
+        name: meData.full_name,
+        plan: meData.plan,
+      }));
+
+      // Sync local push reminders if user enabled them in Settings.
+      const notificationsEnabled = await AsyncStorage.getItem("st_notifications");
+      if (notificationsEnabled === "true") {
+        const reminderData = await api.reminderCandidates(30);
+        await syncRenewalReminders(reminderData.items || []);
+      }
     } catch (e) {
       if (e.message?.includes("401")) {
         await AsyncStorage.multiRemove(["st_token", "st_user"]);
@@ -124,6 +138,9 @@ export default function DashboardScreen({ navigation }) {
           )}
           <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
             <Text style={s.logoutText}>Exit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("Settings")} style={s.logoutBtn}>
+            <Text style={{ fontSize: 20 }}>⚙️</Text>
           </TouchableOpacity>
         </View>
       </View>

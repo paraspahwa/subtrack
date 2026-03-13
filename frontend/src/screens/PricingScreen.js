@@ -1,7 +1,10 @@
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme";
+import { api } from "../api";
 
 const FREE_FEATURES = [
   "Up to 10 subscriptions",
@@ -22,9 +25,77 @@ const PRO_FEATURES = [
 ];
 
 export default function PricingScreen({ navigation }) {
-  const handleUpgrade = () => {
-    // Navigate to Auth if not logged in, otherwise in-app purchase flow
-    navigation.navigate("Auth", { mode: "signup" });
+  const [loading, setLoading] = useState(false);
+
+  const loadCheckout = () => {
+    try {
+      return require("react-native-razorpay").default;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleUpgrade = async () => {
+    // 1. Check if user is logged in
+    const token = await AsyncStorage.getItem("st_token");
+    if (!token) {
+      navigation.navigate("Auth", { mode: "signup" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 2. Create a Razorpay order on the backend (900 paise = ₹9 / $9 equivalent)
+      const order = await api.createOrder({ amount: 900, currency: "INR", plan_type: "pro" });
+
+      // 3. Open Razorpay native checkout
+      const RazorpayCheckout = loadCheckout();
+      if (!RazorpayCheckout) {
+        throw new Error("Native checkout is unavailable in this build. Use an Android/iOS dev build for payment testing.");
+      }
+      const options = {
+        description: "SubTrack Pro — Unlimited subscriptions",
+        image: "https://i.imgur.com/3g7nmJC.png",
+        currency: order.currency || "INR",
+        key: order.key_id,
+        amount: order.amount,
+        name: "SubTrack",
+        order_id: order.razorpay_order_id,
+        prefill: { email: order.email || "" },
+        theme: { color: colors.primary },
+      };
+
+      const paymentData = await RazorpayCheckout.open(options);
+
+      // 4. Verify payment on the backend
+      await api.verifyPayment({
+        razorpay_order_id:   paymentData.razorpay_order_id,
+        razorpay_payment_id: paymentData.razorpay_payment_id,
+        razorpay_signature:  paymentData.razorpay_signature,
+      });
+
+      const me = await api.me();
+      await AsyncStorage.setItem("st_user", JSON.stringify({
+        id: me.user_id,
+        email: me.email,
+        name: me.full_name,
+        plan: me.plan,
+      }));
+
+      Alert.alert(
+        "🎉 Welcome to Pro!",
+        "Your subscription is now active. Enjoy unlimited tracking.",
+        [{ text: "Go to Dashboard", onPress: () => navigation.navigate("Dashboard") }]
+      );
+    } catch (err) {
+      if (err?.code === "PAYMENT_CANCELLED") {
+        // User dismissed — no alert needed
+      } else {
+        Alert.alert("Payment failed", err?.message || "Something went wrong. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -84,8 +155,11 @@ export default function PricingScreen({ navigation }) {
           ))}
 
           <LinearGradient colors={[colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.proBtn}>
-            <TouchableOpacity style={s.proBtnInner} onPress={handleUpgrade}>
-              <Text style={s.proBtnText}>⚡  Upgrade to Pro</Text>
+            <TouchableOpacity style={s.proBtnInner} onPress={handleUpgrade} disabled={loading}>
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={s.proBtnText}>⚡  Upgrade to Pro — $9/mo</Text>
+              }
             </TouchableOpacity>
           </LinearGradient>
         </View>
