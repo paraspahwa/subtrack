@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, CATEGORIES, BILLING_CYCLES, categoryColors } from "../theme";
 import { api } from "../api";
+import InteractiveButton from "./InteractiveButton";
+import BrandShapes from "./BrandShapes";
+import StaggerReveal from "./StaggerReveal";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "CAD", "AUD"];
 
@@ -41,7 +44,6 @@ const RATING_COLORS = ["", colors.error, "#f97316", colors.warning, "#84cc16", c
 
 export default function SubModal({ visible, sub, onClose, onSaved }) {
   const isEdit = Boolean(sub?.id);
-  const today = new Date().toISOString().split("T")[0];
   const [showTemplates, setShowTemplates] = useState(!isEdit);
 
   const blankForm = () => ({
@@ -61,6 +63,12 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
   const [form, setForm] = useState(blankForm);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
+
+  useEffect(() => {
+    setForm(blankForm());
+    setShowTemplates(!isEdit);
+    setError("");
+  }, [sub, visible, isEdit]);
 
   const set = (key) => (val) => {
     setForm(p => {
@@ -114,8 +122,9 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={s.safe}>
+        <BrandShapes variant="modal" style={s.bgShapes} />
         <View style={s.header}>
-          <Text style={s.title}>{isEdit ? "Edit Subscription" : "Add Subscription"}</Text>
+          <Text style={s.title}>{isEdit ? "Edit subscription" : "Add subscription"}</Text>
           <TouchableOpacity onPress={onClose} style={s.closeBtn}>
             <Text style={s.closeText}>✕</Text>
           </TouchableOpacity>
@@ -125,9 +134,9 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
 
           {/* ── Quick-add templates (new subs only) ── */}
           {!isEdit && (
-            <View style={s.field}>
+            <StaggerReveal style={s.field} delay={50} profile="snappy">
               <TouchableOpacity onPress={() => setShowTemplates(v => !v)} style={s.templateToggle}>
-                <Text style={s.label}>⚡  Quick-Add Popular Service</Text>
+                <Text style={s.label}>Quick add popular services</Text>
                 <Text style={s.templateChevron}>{showTemplates ? "▲" : "▼"}</Text>
               </TouchableOpacity>
               {showTemplates && (
@@ -143,12 +152,12 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
                   ))}
                 </ScrollView>
               )}
-            </View>
+            </StaggerReveal>
           )}
 
           {error ? (
             <View style={s.errorBox}>
-              <Text style={s.errorText}>⚠️  {error}</Text>
+              <Text style={s.errorText}>{error}</Text>
             </View>
           ) : null}
 
@@ -207,7 +216,7 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
           {/* ── Usage rating — the waste detector ── */}
           <View style={s.field}>
             <Text style={s.label}>How much do you use this?</Text>
-            <Text style={s.sublabel}>Helps detect subscriptions worth cancelling</Text>
+            <Text style={s.sublabel}>Used to surface subscriptions worth cancelling</Text>
             <View style={s.ratingRow}>
               {[1, 2, 3, 4, 5].map(r => (
                 <TouchableOpacity key={r} onPress={() => set("usage_rating")(form.usage_rating === r ? null : r)} style={[s.ratingBtn, form.usage_rating >= r && { borderColor: RATING_COLORS[r], backgroundColor: RATING_COLORS[r] + "22" }]}>
@@ -235,7 +244,7 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
 
           <View style={s.field}>
             <Text style={s.label}>Notes (optional)</Text>
-            <TextInput style={[s.input, { height: 72, textAlignVertical: "top" }]} placeholder="Any notes..." placeholderTextColor={colors.text4} value={form.notes} onChangeText={set("notes")} multiline />
+            <TextInput style={[s.input, { height: 72, textAlignVertical: "top" }]} placeholder="Add context, reminder reason, or team notes" placeholderTextColor={colors.text4} value={form.notes} onChangeText={set("notes")} multiline />
           </View>
 
           {isEdit && (
@@ -252,14 +261,14 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
           )}
 
           <View style={s.btnRow}>
-            <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-              <Text style={s.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <LinearGradient colors={loading ? ["rgba(124,58,237,0.5)", "rgba(6,182,212,0.5)"] : [colors.primary, colors.cyan]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.saveBtn}>
-              <TouchableOpacity style={s.saveBtnInner} onPress={handleSubmit} disabled={loading}>
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.saveText}>{isEdit ? "Save Changes" : "Add Subscription"}</Text>}
-              </TouchableOpacity>
-            </LinearGradient>
+            <InteractiveButton label="Cancel" variant="ghost" onPress={onClose} style={s.cancelBtn} />
+            {loading ? (
+              <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.saveBtnLoading}>
+                <View style={s.saveBtnInner}><ActivityIndicator color="#fff" /></View>
+              </LinearGradient>
+            ) : (
+              <InteractiveButton label={isEdit ? "Save changes" : "Add subscription"} onPress={handleSubmit} style={s.saveBtn} />
+            )}
           </View>
         </ScrollView>
       </View>
@@ -269,6 +278,7 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
 
 const s = StyleSheet.create({
   safe:             { flex: 1, backgroundColor: colors.bg, paddingTop: Platform.OS === "android" ? 24 : 0 },
+  bgShapes:         { opacity: 0.58 },
   header:           { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderColor: colors.border2 },
   title:            { fontFamily: "Poppins_800ExtraBold", fontSize: 18, color: colors.text },
   closeBtn:         { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
@@ -276,7 +286,7 @@ const s = StyleSheet.create({
   scroll:           { padding: 20 },
 
   errorBox:         { backgroundColor: "rgba(239,68,68,0.1)", borderWidth: 1, borderColor: "rgba(239,68,68,0.3)", borderRadius: 10, padding: 12, marginBottom: 16 },
-  errorText:        { fontFamily: "Inter_500Medium", fontSize: 13, color: "#fca5a5" },
+  errorText:        { fontFamily: "Inter_500Medium", fontSize: 13, color: colors.error },
 
   field:            { marginBottom: 18 },
   row:              { flexDirection: "row", gap: 12 },
@@ -315,9 +325,8 @@ const s = StyleSheet.create({
   ratingHint:       { fontFamily: "Inter_600SemiBold", fontSize: 13, marginTop: 8, textAlign: "center" },
 
   btnRow:           { flexDirection: "row", gap: 12, marginTop: 8, marginBottom: 40 },
-  cancelBtn:        { flex: 1, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
-  cancelText:       { fontFamily: "Inter_600SemiBold", fontSize: 15, color: colors.text3 },
-  saveBtn:          { flex: 2, borderRadius: 12 },
+  cancelBtn:        { flex: 1 },
+  saveBtn:          { flex: 2 },
+  saveBtnLoading:   { flex: 2, borderRadius: 12 },
   saveBtnInner:     { paddingVertical: 15, alignItems: "center" },
-  saveText:         { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
 });
