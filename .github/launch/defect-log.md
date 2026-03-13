@@ -22,6 +22,9 @@ Triage policy:
 | 2026-03-14 11:20 | 0 | 0 | 0 | No | Register/login API preflight passed in backend container |
 | 2026-03-14 15:00 | 0 | 0 | 0 | Yes (UI execution pending) | Backend token checks passed; Android/iOS UI scenarios require manual emulator/simulator run |
 | 2026-03-14 17:45 | 0 | 0 | 0 | No | A1-A8 passed on Android and iOS; auth gate signed off |
+| 2026-03-15 11:00 | 0 | 0 | 0 | No | Day 3 CRUD/schema kickoff started; matrix C1-C8 pending |
+| 2026-03-15 11:20 | 0 | 0 | 0 | No | CRUD API preflight passed (201 create, 200 read/update, 204 delete, 422 invalid payload, schema quick check pass) |
+| 2026-03-15 15:00 | 0 | 0 | 0 | No | API preflight complete and stable; Android/iOS UI CRUD matrix remains in progress |
 
 ## Escalation Notes
 - Any open P0 at 17:45 blocks next-day progression.
