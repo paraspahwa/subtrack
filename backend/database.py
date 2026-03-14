@@ -3,12 +3,16 @@ Database configuration and models for SubTrack — Subscription Tracker
 """
 
 import os
+import logging
 from datetime import datetime
 from urllib.parse import quote, urlsplit, urlunsplit
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, JSON, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from werkzeug.security import generate_password_hash, check_password_hash
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_database_url(url: str) -> str:
@@ -216,18 +220,25 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     # Ensure newer auth columns exist for existing databases created before Phase 2.
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR"))
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP"))
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_used_at TIMESTAMP"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_password_reset_token ON users (password_reset_token)"))
-        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome VARCHAR"))
-        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome_at TIMESTAMP"))
-        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION"))
-        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_change_pct DOUBLE PRECISION"))
-        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_changed_at TIMESTAMP"))
-        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_alert_dismissed BOOLEAN DEFAULT FALSE"))
-        conn.execute(text("UPDATE subscriptions SET amount_alert_dismissed = FALSE WHERE amount_alert_dismissed IS NULL"))
-        conn.execute(text("""
+        def run_optional_migration(sql: str):
+            try:
+                conn.execute(text(sql))
+            except Exception as exc:
+                sql_preview = " ".join(sql.strip().split())[:120]
+                logger.warning("Optional migration skipped: %s (%s)", sql_preview, exc)
+
+        run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR")
+        run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP")
+        run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_used_at TIMESTAMP")
+        run_optional_migration("CREATE INDEX IF NOT EXISTS ix_users_password_reset_token ON users (password_reset_token)")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome VARCHAR")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome_at TIMESTAMP")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_change_pct DOUBLE PRECISION")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_changed_at TIMESTAMP")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_alert_dismissed BOOLEAN DEFAULT FALSE")
+        run_optional_migration("UPDATE subscriptions SET amount_alert_dismissed = FALSE WHERE amount_alert_dismissed IS NULL")
+        run_optional_migration("""
             CREATE TABLE IF NOT EXISTS mailbox_connections (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -242,10 +253,10 @@ def init_db():
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
-        """))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mailbox_connections_user_id ON mailbox_connections (user_id)"))
+        """)
+        run_optional_migration("CREATE INDEX IF NOT EXISTS ix_mailbox_connections_user_id ON mailbox_connections (user_id)")
 
-        conn.execute(text("""
+        run_optional_migration("""
             CREATE TABLE IF NOT EXISTS discovery_candidates (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -264,31 +275,31 @@ def init_db():
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
-        """))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_discovery_candidates_user_id ON discovery_candidates (user_id)"))
+        """)
+        run_optional_migration("CREATE INDEX IF NOT EXISTS ix_discovery_candidates_user_id ON discovery_candidates (user_id)")
 
         # Defensive column/index adds for partially migrated databases.
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS scopes TEXT"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'connected'"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
-        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
-        conn.execute(text("UPDATE mailbox_connections SET access_token_encrypted = NULL, refresh_token_encrypted = NULL WHERE access_token_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL"))
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS scopes TEXT")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'connected'")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        run_optional_migration("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        run_optional_migration("UPDATE mailbox_connections SET access_token_encrypted = NULL, refresh_token_encrypted = NULL WHERE access_token_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL")
 
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_connection_id INTEGER REFERENCES mailbox_connections(id) ON DELETE SET NULL"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS billing_cycle_guess VARCHAR"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS next_billing_date_guess TIMESTAMP"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 0"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_type VARCHAR DEFAULT 'email_receipt'"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_message_id VARCHAR"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS raw_excerpt TEXT"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'pending'"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS accepted_subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
-        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_connection_id INTEGER REFERENCES mailbox_connections(id) ON DELETE SET NULL")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS billing_cycle_guess VARCHAR")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS next_billing_date_guess TIMESTAMP")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 0")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_type VARCHAR DEFAULT 'email_receipt'")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_message_id VARCHAR")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS raw_excerpt TEXT")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'pending'")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS accepted_subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        run_optional_migration("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     print("✅ Database initialized successfully!")
 
 
