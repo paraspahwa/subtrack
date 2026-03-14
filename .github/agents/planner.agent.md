@@ -28,3 +28,12 @@ Turn broad goals into executable milestones, delegate implementation and validat
 - Delegation map
 - Risks and mitigations
 - Completion status
+
+execute/runTests:
+  description: "Run tests to verify feature implementation and stability."
+execute/testFailure:
+  description: "Report test failures with details for debugging and resolution."
+execute/runNotebookCell:
+  description: "Execute a specific cell in a Jupyter notebook to validate code snippets or workflows."
+execute/runinterminal:
+  description: "Run a terminal command to perform tasks such as building, testing, or deploying the project."
