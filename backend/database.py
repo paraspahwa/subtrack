@@ -80,6 +80,7 @@ class User(Base):
     # Password reset
     password_reset_token = Column(String, nullable=True, index=True)
     password_reset_expires = Column(DateTime, nullable=True)
+    password_reset_used_at = Column(DateTime, nullable=True)
 
     # Relationships
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
@@ -157,6 +158,7 @@ def init_db():
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_used_at TIMESTAMP"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_password_reset_token ON users (password_reset_token)"))
     print("✅ Database initialized successfully!")
 

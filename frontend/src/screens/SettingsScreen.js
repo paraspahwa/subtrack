@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Switch, Linking } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Switch, Linking, Platform } from "react-native";
 import { useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -108,6 +108,11 @@ export default function SettingsScreen({ navigation }) {
               />
             }
           />
+          <Text style={s.prefHint}>
+            {Platform.OS === "web"
+              ? "Web fallback: renewal reminders are tracked in-app on your dashboard. For device-level alerts, use the mobile app."
+              : "Mobile: when enabled, local reminder notifications are scheduled on this device."}
+          </Text>
         </StaggerReveal>
 
         <StaggerReveal style={s.section} delay={190} profile="smooth">
@@ -156,6 +161,7 @@ const s = StyleSheet.create({
   rowLabelDanger: { color: colors.error },
   rowValue: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 13, maxWidth: "60%" },
   rowChevron: { fontFamily: "Inter_700Bold", color: colors.text4, fontSize: 17 },
+  prefHint: { marginTop: 4, fontFamily: "Inter_400Regular", color: colors.text4, fontSize: 12, lineHeight: 18 },
 
   version: { fontFamily: "Inter_500Medium", color: colors.text4, textAlign: "center", marginTop: 6, fontSize: 12 },
 });

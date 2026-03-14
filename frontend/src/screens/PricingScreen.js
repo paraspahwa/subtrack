@@ -1,6 +1,7 @@
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from "react-native";
 import { useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme";
@@ -26,6 +27,33 @@ const PRO_FEATURES = [
   "Priority support",
 ];
 
+const WEB_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
+const WEB_UPGRADE_URL = (process.env.EXPO_PUBLIC_WEB_UPGRADE_URL || "").trim();
+
+function normalizePaymentPayload(paymentData, fallbackOrderId) {
+  return {
+    razorpay_order_id: paymentData?.razorpay_order_id || paymentData?.order_id || fallbackOrderId,
+    razorpay_payment_id: paymentData?.razorpay_payment_id || paymentData?.payment_id,
+    razorpay_signature: paymentData?.razorpay_signature || paymentData?.signature,
+  };
+}
+
+function isVerificationSuccess(result) {
+  return Boolean(
+    result?.success ||
+    result?.verified ||
+    result?.payment_status === "success" ||
+    result?.status === "success" ||
+    result?.data?.success ||
+    result?.data?.verified ||
+    result?.data?.payment_status === "success"
+  );
+}
+
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(value || "");
+}
+
 export default function PricingScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
@@ -35,6 +63,82 @@ export default function PricingScreen({ navigation }) {
     } catch {
       return null;
     }
+  };
+
+  const ensureWebCheckoutScript = async () => {
+    if (Platform.OS !== "web") return;
+    const win = globalThis?.window;
+    if (!win?.document) throw new Error("Web checkout is unavailable in this environment.");
+    if (win.Razorpay) return;
+
+    await new Promise((resolve, reject) => {
+      const existing = win.document.querySelector(`script[src="${WEB_CHECKOUT_SCRIPT}"]`);
+      if (existing) {
+        existing.addEventListener("load", () => resolve());
+        existing.addEventListener("error", () => reject(new Error("Could not load checkout script.")));
+        return;
+      }
+
+      const script = win.document.createElement("script");
+      script.src = WEB_CHECKOUT_SCRIPT;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Could not load checkout script."));
+      win.document.body.appendChild(script);
+    });
+
+    if (!win.Razorpay) {
+      throw new Error("Web checkout did not initialize.");
+    }
+  };
+
+  const openWebCheckout = async (order) => {
+    await ensureWebCheckoutScript();
+    const win = globalThis.window;
+
+    return new Promise((resolve, reject) => {
+      const checkout = new win.Razorpay({
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency || "INR",
+        name: "SubTrack",
+        description: "SubTrack Pro — Unlimited subscriptions",
+        order_id: order.razorpay_order_id,
+        image: "https://i.imgur.com/3g7nmJC.png",
+        prefill: { email: order.email || "" },
+        theme: { color: colors.primary },
+        handler: (response) => resolve(response),
+        modal: {
+          ondismiss: () => reject({ code: "PAYMENT_CANCELLED" }),
+        },
+      });
+
+      checkout.on("payment.failed", (response) => {
+        reject(new Error(response?.error?.description || "Payment failed. Please try again."));
+      });
+
+      checkout.open();
+    });
+  };
+
+  const verifyAndActivatePlan = async (paymentData, orderId) => {
+    const verificationPayload = normalizePaymentPayload(paymentData, orderId);
+    if (!verificationPayload.razorpay_order_id || !verificationPayload.razorpay_payment_id || !verificationPayload.razorpay_signature) {
+      throw new Error("Payment details were incomplete. Please contact support if payment was deducted.");
+    }
+
+    const verifyResult = await api.verifyPayment(verificationPayload);
+    if (!isVerificationSuccess(verifyResult)) {
+      throw new Error("Payment was initiated but verification is pending. Please refresh in a minute.");
+    }
+
+    const me = await api.me();
+    await AsyncStorage.setItem("st_user", JSON.stringify({
+      id: me.user_id,
+      email: me.email,
+      name: me.full_name,
+      plan: me.plan,
+    }));
   };
 
   const handleUpgrade = async () => {
@@ -47,36 +151,47 @@ export default function PricingScreen({ navigation }) {
     setLoading(true);
     try {
       const order = await api.createOrder({ amount: 900, currency: "INR", plan_type: "pro" });
-      const RazorpayCheckout = loadCheckout();
-      if (!RazorpayCheckout) {
-        throw new Error("Native checkout is unavailable in this build. Use an Android/iOS dev build for payment testing.");
+      let paymentData = null;
+
+      if (Platform.OS === "web") {
+        paymentData = await openWebCheckout(order);
+      } else {
+        const RazorpayCheckout = loadCheckout();
+        if (RazorpayCheckout) {
+          paymentData = await RazorpayCheckout.open({
+            description: "SubTrack Pro — Unlimited subscriptions",
+            image: "https://i.imgur.com/3g7nmJC.png",
+            currency: order.currency || "INR",
+            key: order.key_id,
+            amount: order.amount,
+            name: "SubTrack",
+            order_id: order.razorpay_order_id,
+            prefill: { email: order.email || "" },
+            theme: { color: colors.primary },
+          });
+        } else {
+          if (isHttpUrl(WEB_UPGRADE_URL)) {
+            Alert.alert(
+              "Continue on web",
+              "Native checkout is unavailable in this build. We will open secure web checkout. After payment, return to the app and refresh your plan status."
+            );
+            await WebBrowser.openBrowserAsync(WEB_UPGRADE_URL);
+            Alert.alert(
+              "Finish in app",
+              "Once payment is complete on web, come back and refresh the app to activate Pro."
+            );
+            return;
+          }
+
+          Alert.alert(
+            "Checkout unavailable",
+            "Native Razorpay checkout is not available in this build. Use a native dev build with Razorpay enabled, or complete checkout on SubTrack web and then refresh this app."
+          );
+          return;
+        }
       }
 
-      const paymentData = await RazorpayCheckout.open({
-        description: "SubTrack Pro — Unlimited subscriptions",
-        image: "https://i.imgur.com/3g7nmJC.png",
-        currency: order.currency || "INR",
-        key: order.key_id,
-        amount: order.amount,
-        name: "SubTrack",
-        order_id: order.razorpay_order_id,
-        prefill: { email: order.email || "" },
-        theme: { color: colors.primary },
-      });
-
-      await api.verifyPayment({
-        razorpay_order_id: paymentData.razorpay_order_id,
-        razorpay_payment_id: paymentData.razorpay_payment_id,
-        razorpay_signature: paymentData.razorpay_signature,
-      });
-
-      const me = await api.me();
-      await AsyncStorage.setItem("st_user", JSON.stringify({
-        id: me.user_id,
-        email: me.email,
-        name: me.full_name,
-        plan: me.plan,
-      }));
+      await verifyAndActivatePlan(paymentData, order?.razorpay_order_id);
 
       Alert.alert("Welcome to Pro", "Your Pro subscription is active.", [{ text: "Go to Dashboard", onPress: () => navigation.navigate("Dashboard") }]);
     } catch (err) {
@@ -145,6 +260,7 @@ export default function PricingScreen({ navigation }) {
             ) : (
               <InteractiveButton label="Upgrade to Pro" variant="ghost" onPress={handleUpgrade} textStyle={s.proInteractiveText} />
             )}
+            <Text style={s.checkoutHint}>{Platform.OS === "web" ? "Secure web checkout opens in-browser." : "Secure checkout uses Razorpay."}</Text>
             </LinearGradient>
           </StaggerReveal>
         </View>
@@ -191,6 +307,7 @@ const s = StyleSheet.create({
   featureTextPro: { fontFamily: "Inter_500Medium", color: "#f8fafc", fontSize: 14, flex: 1 },
   proBtnLoading: { marginTop: 4, borderRadius: 12, backgroundColor: "#f8fafc", paddingVertical: 13, alignItems: "center" },
   proInteractiveText: { color: colors.primaryDark },
+  checkoutHint: { marginTop: 10, fontFamily: "Inter_500Medium", color: "rgba(248,250,252,0.75)", fontSize: 12 },
 
   footer: { marginTop: 16, textAlign: "center", fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 12 },
 });

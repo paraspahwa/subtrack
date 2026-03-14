@@ -12,6 +12,8 @@ import os
 import hmac
 import hashlib
 import re
+import smtplib
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
 from calendar import monthrange
@@ -19,6 +21,7 @@ import csv
 import io
 import secrets as secrets_module
 from urllib.parse import urlparse
+from email.message import EmailMessage
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -111,10 +114,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+def _safe_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 RETURN_RESET_TOKEN = os.getenv("RETURN_RESET_TOKEN", "false").lower() == "true"
+RESET_TOKEN_EXPIRE_MINUTES = max(5, _safe_int_env("RESET_TOKEN_EXPIRE_MINUTES", 60))
+RESET_PASSWORD_URL = os.getenv("RESET_PASSWORD_URL", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = _safe_int_env("SMTP_PORT", 587)
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "")
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+
+logger = logging.getLogger("subtrack")
 
 razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_KEY_ID else None
 
@@ -129,6 +149,48 @@ def _is_real_payment_key(value: str) -> bool:
 
 def _payment_configured() -> bool:
     return _is_real_payment_key(RAZORPAY_KEY_ID) and _is_real_payment_key(RAZORPAY_KEY_SECRET)
+
+
+def _smtp_configured() -> bool:
+    return all([SMTP_HOST, SMTP_PORT, SMTP_FROM_EMAIL])
+
+
+def _build_reset_link(token: str, email: str) -> str:
+    base = RESET_PASSWORD_URL.strip()
+    if not base:
+        return token
+    joiner = "&" if "?" in base else "?"
+    return f"{base}{joiner}token={token}&email={email}"
+
+
+def _send_reset_email(to_email: str, token: str) -> bool:
+    if not _smtp_configured():
+        logger.warning("SMTP not configured; skipping password reset email dispatch")
+        return False
+
+    link_or_token = _build_reset_link(token, to_email)
+    msg = EmailMessage()
+    msg["Subject"] = "SubTrack password reset"
+    msg["From"] = SMTP_FROM_EMAIL
+    msg["To"] = to_email
+    msg.set_content(
+        "We received a request to reset your SubTrack password. "
+        f"This link/token expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.\n\n"
+        f"Reset details: {link_or_token}\n\n"
+        "If you did not request this, you can safely ignore this email."
+    )
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            if SMTP_USE_TLS:
+                server.starttls()
+            if SMTP_USERNAME:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception:
+        logger.exception("Password reset email dispatch failed")
+        return False
 
 
 @app.on_event("startup")
@@ -205,14 +267,21 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
 
 @app.post("/api/auth/forgot-password")
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    if not RETURN_RESET_TOKEN and not _smtp_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Password reset service is temporarily unavailable",
+        )
+
     user = db.query(User).filter(User.email == req.email.lower()).first()
     # Always return 200 to prevent email enumeration
     if user:
         token = secrets_module.token_urlsafe(32)
         user.password_reset_token = token
-        user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        user.password_reset_expires = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+        user.password_reset_used_at = None
         db.commit()
-        # TODO: send token via email (e.g. SendGrid/Resend).
+        _send_reset_email(user.email, token)
         if RETURN_RESET_TOKEN:
             return {"message": "Reset instructions sent.", "reset_token": token}
         return {"message": "Reset instructions sent."}
@@ -225,11 +294,16 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     user = db.query(User).filter(
         User.password_reset_token == req.token,
-        User.password_reset_expires > datetime.utcnow(),
     ).first()
-    if not user:
+    if (
+        not user
+        or not user.password_reset_expires
+        or user.password_reset_expires <= datetime.utcnow()
+        or user.password_reset_used_at is not None
+    ):
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
     user.set_password(req.new_password)
+    user.password_reset_used_at = datetime.utcnow()
     user.password_reset_token = None
     user.password_reset_expires = None
     db.commit()
@@ -597,6 +671,32 @@ def verify_payment(
 ):
     if not razorpay_client or not _payment_configured():
         raise HTTPException(status_code=503, detail="Payment service not configured")
+
+    payment = db.query(Payment).filter(Payment.razorpay_order_id == req.razorpay_order_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if payment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Order does not belong to user")
+
+    if payment.status == "success":
+        same_payment = payment.razorpay_payment_id == req.razorpay_payment_id
+        same_signature = payment.razorpay_signature == req.razorpay_signature
+        if same_payment and same_signature:
+            if current_user.plan != "pro" or not current_user.subscription_active:
+                current_user.plan = "pro"
+                current_user.subscription_active = True
+                if not current_user.subscription_end_date or current_user.subscription_end_date < datetime.utcnow():
+                    current_user.subscription_end_date = datetime.utcnow() + timedelta(days=365)
+                db.commit()
+            return {
+                "success": True,
+                "verified": True,
+                "already_verified": True,
+                "plan": "pro",
+                "payment_status": payment.status,
+            }
+        raise HTTPException(status_code=409, detail="Order already verified with different payment details")
+
     try:
         razorpay_client.utility.verify_payment_signature({
             "razorpay_order_id": req.razorpay_order_id,
@@ -606,17 +706,21 @@ def verify_payment(
     except Exception:
         raise HTTPException(status_code=400, detail="Payment verification failed")
 
-    payment = db.query(Payment).filter(Payment.razorpay_order_id == req.razorpay_order_id).first()
-    if payment:
-        payment.razorpay_payment_id = req.razorpay_payment_id
-        payment.razorpay_signature = req.razorpay_signature
-        payment.status = "success"
+    payment.razorpay_payment_id = req.razorpay_payment_id
+    payment.razorpay_signature = req.razorpay_signature
+    payment.status = "success"
 
     current_user.plan = "pro"
     current_user.subscription_active = True
     current_user.subscription_end_date = datetime.utcnow() + timedelta(days=365)
     db.commit()
-    return {"success": True, "plan": "pro"}
+    return {
+        "success": True,
+        "verified": True,
+        "already_verified": False,
+        "plan": "pro",
+        "payment_status": payment.status,
+    }
 
 
 @app.post("/api/payments/webhook")

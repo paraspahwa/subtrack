@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,6 +26,7 @@ export default function DashboardScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState("all");
   const [filterCat, setFilterCat] = useState("All");
   const [showAnalytics, setShowAnalytics] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -36,8 +37,11 @@ export default function DashboardScreen({ navigation }) {
       setUserInfo(meData);
       await AsyncStorage.setItem("st_user", JSON.stringify({ id: meData.user_id, email: meData.email, name: meData.full_name, plan: meData.plan }));
 
-      const notificationsEnabled = await AsyncStorage.getItem("st_notifications");
-      if (notificationsEnabled === "true") {
+      const reminderPref = await AsyncStorage.getItem("st_notifications");
+      const remindersOn = reminderPref === "true";
+      setNotificationsEnabled(remindersOn);
+
+      if (remindersOn && Platform.OS !== "web") {
         const reminderData = await api.reminderCandidates(30);
         await syncRenewalReminders(reminderData.items || []);
       }
@@ -160,6 +164,16 @@ export default function DashboardScreen({ navigation }) {
               <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.limitCta} hitSlop={8}><Text style={s.limitCtaTxt}>Upgrade</Text></TouchableOpacity>
             </View>
           )}
+
+          <View style={s.reminderBanner}>
+            <Text style={s.reminderText}>
+              {Platform.OS === "web"
+                ? "Web reminder fallback: renewals are tracked in-app on this dashboard. Use mobile for device-level local alerts."
+                : notificationsEnabled
+                ? "Local reminder notifications are enabled on this device."
+                : "Turn on reminders in Settings to schedule local alerts on this device."}
+            </Text>
+          </View>
           </LinearGradient>
         </StaggerReveal>
 
@@ -253,6 +267,16 @@ const s = StyleSheet.create({
   limitTxt: { fontFamily: "Inter_500Medium", color: colors.warning, fontSize: 12, flex: 1 },
   limitCta: { borderRadius: 8, backgroundColor: colors.warning, paddingHorizontal: 10, paddingVertical: 8 },
   limitCtaTxt: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 12 },
+  reminderBanner: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(18,94,89,0.18)",
+    backgroundColor: "rgba(18,94,89,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  reminderText: { fontFamily: "Inter_500Medium", color: colors.text2, fontSize: 12, lineHeight: 17 },
 
   analyticsWrap: { paddingHorizontal: 20, marginBottom: 6 },
 

@@ -14,6 +14,8 @@ export default function AuthScreen({ navigation, route }) {
   const [form, setForm] = useState({ email: "", password: "", fullName: "", confirmPassword: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetInfo, setResetInfo] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [resetMode, setResetMode] = useState(false);
   const [resetStep, setResetStep] = useState(1);
@@ -28,30 +30,43 @@ export default function AuthScreen({ navigation, route }) {
   };
 
   const handleForgotPassword = async () => {
-    if (!resetEmail.includes("@")) return setError("Enter a valid email.");
+    if (!resetEmail.includes("@")) return setResetError("Enter a valid email.");
     setLoading(true);
-    setError("");
+    setResetError("");
+    setResetInfo("");
     try {
       const data = await api.forgotPassword(resetEmail.trim().toLowerCase());
       if (data.reset_token) setResetToken(data.reset_token);
+      setResetInfo("If an account exists for this email, reset instructions have been sent.");
       setResetStep(2);
     } catch (err) {
-      setError(err.message);
+      if (/network|failed|503|500/i.test(err?.message || "")) {
+        setResetError("We could not process your request right now. Please try again shortly.");
+      } else {
+        setResetInfo("If an account exists for this email, reset instructions have been sent.");
+        setResetStep(2);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetPassword = async () => {
-    if (newPassword.length < 6) return setError("Password must be at least 6 characters.");
-    if (!resetToken.trim()) return setError("Enter the reset token.");
+    if (newPassword.length < 6) return setResetError("Password must be at least 6 characters.");
+    if (!resetToken.trim()) return setResetError("Enter the reset token.");
     setLoading(true);
-    setError("");
+    setResetError("");
+    setResetInfo("");
     try {
       await api.resetPassword(resetToken.trim(), newPassword);
+      setResetInfo("Your password has been updated successfully.");
       setResetDone(true);
     } catch (err) {
-      setError(err.message);
+      if (/network|failed|503|500/i.test(err?.message || "")) {
+        setResetError("We could not reset your password right now. Please try again shortly.");
+      } else {
+        setResetError("We could not reset your password with those details. Check the token and try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -173,7 +188,15 @@ export default function AuthScreen({ navigation, route }) {
               </View>
 
               {mode === "login" && (
-                <TouchableOpacity onPress={() => { setResetMode(true); setResetStep(1); setError(""); setResetDone(false); }} style={s.forgotWrap}>
+                <TouchableOpacity onPress={() => {
+                  setResetMode(true);
+                  setResetStep(1);
+                  setResetDone(false);
+                  setResetToken("");
+                  setNewPassword("");
+                  setResetError("");
+                  setResetInfo("");
+                }} style={s.forgotWrap}>
                   <Text style={s.forgotText}>Forgot password?</Text>
                 </TouchableOpacity>
               )}
@@ -216,28 +239,46 @@ export default function AuthScreen({ navigation, route }) {
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>{resetDone ? "Password updated" : resetStep === 1 ? "Reset your password" : "Set a new password"}</Text>
-            {error ? (
+            {resetError ? (
               <View style={s.errorBox}>
-                <Text style={s.errorText}>{error}</Text>
+                <Text style={s.errorText}>{resetError}</Text>
+              </View>
+            ) : null}
+            {resetInfo ? (
+              <View style={s.infoBox}>
+                <Text style={s.infoText}>{resetInfo}</Text>
               </View>
             ) : null}
 
             {resetDone ? (
               <>
                 <Text style={s.modalSub}>You can now sign in with your new password.</Text>
-                <TouchableOpacity style={s.outlineBtn} onPress={() => { setResetMode(false); setMode("login"); setResetDone(false); setResetStep(1); }}>
+                <TouchableOpacity style={s.outlineBtn} onPress={() => {
+                  setResetMode(false);
+                  setMode("login");
+                  setResetDone(false);
+                  setResetStep(1);
+                  setResetToken("");
+                  setNewPassword("");
+                  setResetError("");
+                  setResetInfo("");
+                }}>
                   <Text style={s.outlineBtnText}>Back to Log In</Text>
                 </TouchableOpacity>
               </>
             ) : resetStep === 1 ? (
               <>
-                <Text style={s.modalSub}>Enter your email and we will send a reset token.</Text>
+                <Text style={s.modalSub}>Enter your email. If an account exists, reset instructions will be sent.</Text>
                 <TextInput
                   style={s.input}
                   placeholder="you@example.com"
                   placeholderTextColor={colors.text4}
                   value={resetEmail}
-                  onChangeText={(v) => { setResetEmail(v); setError(""); }}
+                  onChangeText={(v) => {
+                    setResetEmail(v);
+                    setResetError("");
+                    setResetInfo("");
+                  }}
                   autoCapitalize="none"
                   keyboardType="email-address"
                 />
@@ -255,7 +296,11 @@ export default function AuthScreen({ navigation, route }) {
                   placeholder="Reset token"
                   placeholderTextColor={colors.text4}
                   value={resetToken}
-                  onChangeText={(v) => { setResetToken(v); setError(""); }}
+                  onChangeText={(v) => {
+                    setResetToken(v);
+                    setResetError("");
+                    setResetInfo("");
+                  }}
                   autoCapitalize="none"
                 />
                 <TextInput
@@ -263,7 +308,11 @@ export default function AuthScreen({ navigation, route }) {
                   placeholder="New password"
                   placeholderTextColor={colors.text4}
                   value={newPassword}
-                  onChangeText={(v) => { setNewPassword(v); setError(""); }}
+                  onChangeText={(v) => {
+                    setNewPassword(v);
+                    setResetError("");
+                    setResetInfo("");
+                  }}
                   secureTextEntry
                   autoCapitalize="none"
                 />
@@ -276,7 +325,11 @@ export default function AuthScreen({ navigation, route }) {
             )}
 
             {!resetDone && (
-              <TouchableOpacity style={s.cancelWrap} onPress={() => { setResetMode(false); setError(""); }}>
+              <TouchableOpacity style={s.cancelWrap} onPress={() => {
+                setResetMode(false);
+                setResetError("");
+                setResetInfo("");
+              }}>
                 <Text style={s.forgotText}>Cancel</Text>
               </TouchableOpacity>
             )}
@@ -312,6 +365,8 @@ const s = StyleSheet.create({
 
   errorBox: { borderRadius: 12, padding: 11, borderWidth: 1, borderColor: "rgba(220,38,38,0.25)", backgroundColor: "rgba(220,38,38,0.08)", marginBottom: 14 },
   errorText: { fontFamily: "Inter_500Medium", color: colors.error, fontSize: 13 },
+  infoBox: { borderRadius: 12, padding: 11, borderWidth: 1, borderColor: "rgba(18,94,89,0.24)", backgroundColor: "rgba(18,94,89,0.09)", marginBottom: 14 },
+  infoText: { fontFamily: "Inter_500Medium", color: colors.primaryDark, fontSize: 13 },
 
   field: { marginBottom: 14 },
   label: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12, marginBottom: 6 },
