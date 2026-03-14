@@ -19,10 +19,13 @@ export default function DashboardScreen({ navigation }) {
   const [subs, setSubs] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [actionCenterItems, setActionCenterItems] = useState([]);
+  const [priceAlerts, setPriceAlerts] = useState([]);
   const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingMap, setActionLoadingMap] = useState({});
+  const [amountAlertLoadingMap, setAmountAlertLoadingMap] = useState({});
+  const [priceAlertsLoading, setPriceAlertsLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editSub, setEditSub] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
@@ -73,6 +76,22 @@ export default function DashboardScreen({ navigation }) {
     fetchAll();
   }, [fetchAll]);
 
+  const fetchPriceAlerts = useCallback(async (showLoading = true) => {
+    if (showLoading) setPriceAlertsLoading(true);
+    try {
+      const data = await api.priceAnomalies();
+      setPriceAlerts(data?.items || []);
+    } catch {
+      setPriceAlerts([]);
+    } finally {
+      if (showLoading) setPriceAlertsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPriceAlerts();
+  }, [fetchPriceAlerts]);
+
   const handleLogout = async () => {
     await AsyncStorage.multiRemove(["st_token", "st_user"]);
     navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
@@ -115,6 +134,7 @@ export default function DashboardScreen({ navigation }) {
     setModalVisible(false);
     setEditSub(null);
     fetchAll();
+    fetchPriceAlerts(false);
   };
 
   const reasonLabel = (reason) => {
@@ -149,6 +169,54 @@ export default function DashboardScreen({ navigation }) {
         onPress: () => handleActionOutcome(id, "cancelled"),
       },
     ]);
+  };
+
+  const handleDismissAmountAlert = async (id) => {
+    setAmountAlertLoadingMap((prev) => ({ ...prev, [id]: true }));
+    try {
+      await api.dismissAmountAlert(id);
+      await fetchPriceAlerts(false);
+    } catch (e) {
+      Alert.alert("Action failed", e.message || "Could not dismiss price alert.");
+    } finally {
+      setAmountAlertLoadingMap((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
+
+  const formatAmount = (value, currency = "USD") => {
+    const numeric = Number(value || 0);
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(numeric);
+    } catch {
+      return `${currency} ${numeric.toFixed(2)}`;
+    }
+  };
+
+  const formatChangePct = (value) => {
+    const numeric = Number(value || 0);
+    const prefix = numeric > 0 ? "+" : "";
+    return `${prefix}${numeric.toFixed(1)}%`;
+  };
+
+  const formatChangedMeta = (changedAt) => {
+    if (!changedAt) return "Updated recently";
+    const dt = new Date(changedAt);
+    if (Number.isNaN(dt.getTime())) return "Updated recently";
+
+    const daysAgo = Math.max(0, Math.floor((Date.now() - dt.getTime()) / (1000 * 60 * 60 * 24)));
+    const agoLabel = daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`;
+    const dateLabel = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${dateLabel} • ${agoLabel}`;
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchAll(true);
+    fetchPriceAlerts(false);
   };
 
   const filteredSubs = subs.filter((s) => {
@@ -187,7 +255,7 @@ export default function DashboardScreen({ navigation }) {
       <ScrollView
         style={s.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(true); }} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
       >
         <StaggerReveal delay={70} profile="snappy">
           <LinearGradient colors={["#fff8eb", "#f6f3ea"]} style={s.heroCard}>
@@ -267,6 +335,43 @@ export default function DashboardScreen({ navigation }) {
                       style={[s.outcomeBtn, s.outcomeBtnDanger, isBusy && s.outcomeBtnDisabled]}
                     >
                       <Text style={[s.outcomeBtnText, s.outcomeBtnDangerText]}>Cancelled</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        <View style={s.priceAlertWrap}>
+          <View style={s.actionCenterHead}>
+            <Text style={s.actionCenterTitle}>Price Alerts</Text>
+            <Text style={s.actionCenterMeta}>{priceAlerts.length} flagged changes</Text>
+          </View>
+          {priceAlertsLoading ? (
+            <View style={s.priceAlertLoading}><ActivityIndicator color={colors.primary} size="small" /></View>
+          ) : priceAlerts.length === 0 ? (
+            <Text style={s.actionCenterEmpty}>No recent amount anomalies above threshold.</Text>
+          ) : (
+            priceAlerts.map((item) => {
+              const isBusy = !!amountAlertLoadingMap[item.id];
+              return (
+                <View key={`price-${item.id}`} style={s.priceAlertRow}>
+                  <View style={s.actionRowTop}>
+                    <Text style={s.actionName}>{item.name}</Text>
+                    <Text style={[s.priceDelta, Number(item.change_pct || 0) < 0 ? s.priceDeltaDown : s.priceDeltaUp]}>{formatChangePct(item.change_pct)}</Text>
+                  </View>
+                  <Text style={s.priceAlertAmounts}>
+                    {formatAmount(item.previous_amount, item.currency)} → {formatAmount(item.current_amount, item.currency)}
+                  </Text>
+                  <View style={s.priceAlertFooter}>
+                    <Text style={s.priceAlertMeta}>{formatChangedMeta(item.changed_at)}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleDismissAmountAlert(item.id)}
+                      disabled={isBusy}
+                      style={[s.outcomeBtn, isBusy && s.outcomeBtnDisabled]}
+                    >
+                      <Text style={s.outcomeBtnText}>Dismiss</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -420,6 +525,32 @@ const s = StyleSheet.create({
   outcomeBtnDisabled: { opacity: 0.55 },
   outcomeBtnText: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 12 },
   outcomeBtnDangerText: { color: colors.warning },
+
+  priceAlertWrap: {
+    marginHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border2,
+    backgroundColor: colors.card,
+    padding: 12,
+  },
+  priceAlertLoading: { paddingVertical: 8 },
+  priceAlertRow: {
+    borderWidth: 1,
+    borderColor: colors.border2,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    padding: 10,
+    marginTop: 8,
+  },
+  priceDelta: { fontFamily: "Inter_700Bold", fontSize: 11 },
+  priceDeltaUp: { color: colors.warning },
+  priceDeltaDown: { color: colors.primary },
+  priceAlertAmounts: { marginTop: 6, fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text2 },
+  priceAlertFooter: { marginTop: 9, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  priceAlertMeta: { flex: 1, fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 11 },
 
   filters: { marginBottom: 8 },
   filtersInner: { paddingHorizontal: 20, gap: 8, alignItems: "center" },

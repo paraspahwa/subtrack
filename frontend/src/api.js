@@ -40,9 +40,37 @@ export const api = {
   analytics: () => request("/api/analytics"),
   reminderCandidates: (days = 30) => request(`/api/reminders/upcoming?days=${days}`),
   actionCenterRisk: (days = 30, limit = 20) => request(`/api/action-center/renewal-risk?days=${days}&limit=${limit}`),
+  priceAnomalies: () => request("/api/action-center/price-anomalies"),
+  dismissAmountAlert: (id) => request(`/api/subscriptions/${id}/dismiss-amount-alert`, {
+    method: "POST",
+  }),
   setCancellationOutcome: (id, outcome) => request(`/api/subscriptions/${id}/cancellation-outcome`, {
     method: "POST",
     body: JSON.stringify({ outcome }),
+  }),
+
+  // Discovery
+  discoveryMailbox: () => request("/api/discovery/mailbox"),
+  connectDiscoveryMailbox: (provider, email) => request("/api/discovery/mailbox/connect", {
+    method: "POST",
+    body: JSON.stringify({ provider, email }),
+  }),
+  disconnectDiscoveryMailbox: () => request("/api/discovery/mailbox/disconnect", {
+    method: "POST",
+  }),
+  discoveryCandidates: (status = "pending") => request(`/api/discovery/candidates?status=${encodeURIComponent(status)}`),
+  seedDiscoveryDemoCandidates: () => request("/api/discovery/candidates/seed-demo", {
+    method: "POST",
+  }),
+  acceptDiscoveryCandidate: (id) => request(`/api/discovery/candidates/${id}/accept`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
+  rejectDiscoveryCandidate: (id) => request(`/api/discovery/candidates/${id}/reject`, {
+    method: "POST",
+  }),
+  falsePositiveDiscoveryCandidate: (id) => request(`/api/discovery/candidates/${id}/false-positive`, {
+    method: "POST",
   }),
 
   // Export

@@ -85,6 +85,8 @@ class User(Base):
     # Relationships
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
+    mailbox_connections = relationship("MailboxConnection", back_populates="user", cascade="all, delete-orphan")
+    discovery_candidates = relationship("DiscoveryCandidate", back_populates="user", cascade="all, delete-orphan")
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -107,6 +109,10 @@ class Subscription(Base):
     name = Column(String, nullable=False)
     category = Column(String, nullable=False, default="Other")  # Entertainment, Productivity, Health, etc.
     amount = Column(Float, nullable=False)
+    last_amount = Column(Float, nullable=True)
+    amount_change_pct = Column(Float, nullable=True)
+    amount_changed_at = Column(DateTime, nullable=True)
+    amount_alert_dismissed = Column(Boolean, nullable=False, default=False)
     currency = Column(String, default="USD")
     billing_cycle = Column(String, nullable=False, default="monthly")  # monthly, yearly, weekly
     next_billing_date = Column(DateTime, nullable=False)
@@ -133,6 +139,7 @@ class Subscription(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="subscriptions")
+    accepted_discovery_candidates = relationship("DiscoveryCandidate", back_populates="accepted_subscription")
 
 
 class Payment(Base):
@@ -156,6 +163,55 @@ class Payment(Base):
     user = relationship("User", back_populates="payments")
 
 
+class MailboxConnection(Base):
+    __tablename__ = "mailbox_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    provider = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    access_token_encrypted = Column(Text, nullable=True)
+    refresh_token_encrypted = Column(Text, nullable=True)
+    scopes = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="connected")
+    connected_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_synced_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="mailbox_connections")
+    discovery_candidates = relationship("DiscoveryCandidate", back_populates="source_connection")
+
+
+class DiscoveryCandidate(Base):
+    __tablename__ = "discovery_candidates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    source_connection_id = Column(Integer, ForeignKey("mailbox_connections.id"), nullable=True)
+
+    merchant_name = Column(String, nullable=False)
+    amount = Column(Float, nullable=True)
+    currency = Column(String, nullable=False, default="USD")
+    billing_cycle_guess = Column(String, nullable=True)
+    next_billing_date_guess = Column(DateTime, nullable=True)
+    confidence = Column(Float, nullable=False, default=0.0)
+    source_type = Column(String, nullable=False, default="email_receipt")
+    source_message_id = Column(String, nullable=True)
+    raw_excerpt = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="pending")
+    accepted_subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="discovery_candidates")
+    source_connection = relationship("MailboxConnection", back_populates="discovery_candidates")
+    accepted_subscription = relationship("Subscription", back_populates="accepted_discovery_candidates")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     # Ensure newer auth columns exist for existing databases created before Phase 2.
@@ -166,6 +222,73 @@ def init_db():
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_password_reset_token ON users (password_reset_token)"))
         conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome VARCHAR"))
         conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome_at TIMESTAMP"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_change_pct DOUBLE PRECISION"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_changed_at TIMESTAMP"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_alert_dismissed BOOLEAN DEFAULT FALSE"))
+        conn.execute(text("UPDATE subscriptions SET amount_alert_dismissed = FALSE WHERE amount_alert_dismissed IS NULL"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS mailbox_connections (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider VARCHAR NOT NULL,
+                email VARCHAR NOT NULL,
+                access_token_encrypted TEXT,
+                refresh_token_encrypted TEXT,
+                scopes TEXT,
+                status VARCHAR NOT NULL DEFAULT 'connected',
+                connected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_synced_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mailbox_connections_user_id ON mailbox_connections (user_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS discovery_candidates (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                source_connection_id INTEGER REFERENCES mailbox_connections(id) ON DELETE SET NULL,
+                merchant_name VARCHAR NOT NULL,
+                amount DOUBLE PRECISION,
+                currency VARCHAR NOT NULL DEFAULT 'USD',
+                billing_cycle_guess VARCHAR,
+                next_billing_date_guess TIMESTAMP,
+                confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
+                source_type VARCHAR NOT NULL DEFAULT 'email_receipt',
+                source_message_id VARCHAR,
+                raw_excerpt TEXT,
+                status VARCHAR NOT NULL DEFAULT 'pending',
+                accepted_subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_discovery_candidates_user_id ON discovery_candidates (user_id)"))
+
+        # Defensive column/index adds for partially migrated databases.
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS scopes TEXT"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'connected'"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+        conn.execute(text("ALTER TABLE mailbox_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+        conn.execute(text("UPDATE mailbox_connections SET access_token_encrypted = NULL, refresh_token_encrypted = NULL WHERE access_token_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL"))
+
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_connection_id INTEGER REFERENCES mailbox_connections(id) ON DELETE SET NULL"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS billing_cycle_guess VARCHAR"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS next_billing_date_guess TIMESTAMP"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 0"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_type VARCHAR DEFAULT 'email_receipt'"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS source_message_id VARCHAR"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS raw_excerpt TEXT"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'pending'"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS accepted_subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+        conn.execute(text("ALTER TABLE discovery_candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
     print("✅ Database initialized successfully!")
 
 

@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Switch, Linking, Platform } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Switch, Linking, Platform, TextInput, ActivityIndicator } from "react-native";
 import { useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -10,6 +10,19 @@ import BrandShapes from "../components/BrandShapes";
 export default function SettingsScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [mailbox, setMailbox] = useState(null);
+  const [mailboxLoading, setMailboxLoading] = useState(false);
+  const [mailboxError, setMailboxError] = useState("");
+  const [mailboxProvider, setMailboxProvider] = useState("gmail");
+  const [mailboxEmail, setMailboxEmail] = useState("");
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [disconnectLoading, setDisconnectLoading] = useState(false);
+
+  const [candidates, setCandidates] = useState([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [candidatesError, setCandidatesError] = useState("");
+  const [seedLoading, setSeedLoading] = useState(false);
+  const [candidateActionId, setCandidateActionId] = useState(null);
 
   useEffect(() => {
     AsyncStorage.getItem("st_user").then((raw) => {
@@ -18,7 +31,131 @@ export default function SettingsScreen({ navigation }) {
     AsyncStorage.getItem("st_notifications").then((val) => {
       setNotificationsEnabled(val === "true");
     });
+
+    loadDiscoveryMailbox();
+    loadPendingCandidates();
   }, []);
+
+  const mailboxStatus = String(mailbox?.status || "").toLowerCase();
+  const mailboxConnected = Boolean(
+    mailbox?.connected || mailbox?.is_connected || mailboxStatus === "connected"
+  );
+
+  const mailboxStatusLabel = mailboxConnected
+    ? `Connected${mailbox?.email ? ` as ${mailbox.email}` : ""}`
+    : "Not connected";
+
+  const loadDiscoveryMailbox = async () => {
+    setMailboxLoading(true);
+    setMailboxError("");
+    try {
+      const data = await api.discoveryMailbox();
+      const mailboxData = data?.mailbox || data || null;
+      setMailbox(mailboxData);
+      if (mailboxData?.email) setMailboxEmail(mailboxData.email);
+      if (mailboxData?.provider) setMailboxProvider(String(mailboxData.provider).toLowerCase());
+    } catch (err) {
+      setMailboxError(err.message || "Failed to load mailbox status.");
+    } finally {
+      setMailboxLoading(false);
+    }
+  };
+
+  const loadPendingCandidates = async () => {
+    setCandidatesLoading(true);
+    setCandidatesError("");
+    try {
+      const data = await api.discoveryCandidates("pending");
+      const list = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setCandidates(list);
+    } catch (err) {
+      setCandidatesError(err.message || "Failed to load discovery candidates.");
+    } finally {
+      setCandidatesLoading(false);
+    }
+  };
+
+  const handleConnectMailbox = async () => {
+    const provider = mailboxProvider.trim().toLowerCase();
+    const email = mailboxEmail.trim();
+    if (!provider || !email) {
+      Alert.alert("Missing details", "Provider and email are required.");
+      return;
+    }
+
+    setConnectLoading(true);
+    setMailboxError("");
+    try {
+      await api.connectDiscoveryMailbox(provider, email);
+      await loadDiscoveryMailbox();
+    } catch (err) {
+      setMailboxError(err.message || "Failed to connect mailbox.");
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const handleDisconnectMailbox = async () => {
+    setDisconnectLoading(true);
+    setMailboxError("");
+    try {
+      await api.disconnectDiscoveryMailbox();
+      await loadDiscoveryMailbox();
+    } catch (err) {
+      setMailboxError(err.message || "Failed to disconnect mailbox.");
+    } finally {
+      setDisconnectLoading(false);
+    }
+  };
+
+  const handleSeedDemoCandidates = async () => {
+    setSeedLoading(true);
+    setCandidatesError("");
+    try {
+      await api.seedDiscoveryDemoCandidates();
+      await loadPendingCandidates();
+    } catch (err) {
+      setCandidatesError(err.message || "Failed to seed demo candidates.");
+    } finally {
+      setSeedLoading(false);
+    }
+  };
+
+  const handleCandidateAction = async (candidateId, action) => {
+    setCandidateActionId(candidateId);
+    setCandidatesError("");
+    try {
+      if (action === "accept") {
+        await api.acceptDiscoveryCandidate(candidateId);
+      } else if (action === "reject") {
+        await api.rejectDiscoveryCandidate(candidateId);
+      } else {
+        await api.falsePositiveDiscoveryCandidate(candidateId);
+      }
+      await loadPendingCandidates();
+    } catch (err) {
+      setCandidatesError(err.message || "Failed to update candidate.");
+    } finally {
+      setCandidateActionId(null);
+    }
+  };
+
+  const formatCurrency = (value, currency = "USD") => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return "-";
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(num);
+    } catch {
+      return `$${num.toFixed(2)}`;
+    }
+  };
+
+  const formatConfidence = (value) => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return "-";
+    const pct = num <= 1 ? num * 100 : num;
+    return `${Math.round(pct)}%`;
+  };
 
   const handleLogout = () => {
     Alert.alert("Log out", "Are you sure you want to log out?", [
@@ -124,6 +261,109 @@ export default function SettingsScreen({ navigation }) {
           <Row label="Report a bug" onPress={() => Linking.openURL("https://github.com/paraspahwa/subtrack/issues")} />
         </StaggerReveal>
 
+        <StaggerReveal style={s.section} delay={205} profile="smooth">
+          <Text style={s.sectionLabel}>Discovery</Text>
+          <Text style={s.discoveryHint}>Mailbox status: {mailboxStatusLabel}</Text>
+          {!!mailbox?.provider && <Text style={s.discoveryHint}>Provider: {String(mailbox.provider).toUpperCase()}</Text>}
+          {mailboxLoading && <ActivityIndicator style={s.discoveryLoader} color={colors.primary} />}
+          {!!mailboxError && <Text style={s.errorText}>{mailboxError}</Text>}
+
+          <View style={s.formRow}>
+            <TextInput
+              value={mailboxProvider}
+              onChangeText={setMailboxProvider}
+              placeholder="provider (gmail/outlook)"
+              placeholderTextColor={colors.text4}
+              style={[s.input, s.inputCompact]}
+              autoCapitalize="none"
+            />
+            <TextInput
+              value={mailboxEmail}
+              onChangeText={setMailboxEmail}
+              placeholder="mailbox email"
+              placeholderTextColor={colors.text4}
+              style={[s.input, s.inputWide]}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
+
+          <View style={s.actionRow}>
+            <TouchableOpacity
+              style={[s.actionBtn, (connectLoading || mailboxLoading) && s.actionBtnDisabled]}
+              onPress={handleConnectMailbox}
+              disabled={connectLoading || mailboxLoading}
+            >
+              <Text style={s.actionBtnText}>{connectLoading ? "Connecting..." : "Connect"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionBtn, (disconnectLoading || mailboxLoading || !mailboxConnected) && s.actionBtnDisabled]}
+              onPress={handleDisconnectMailbox}
+              disabled={disconnectLoading || mailboxLoading || !mailboxConnected}
+            >
+              <Text style={s.actionBtnText}>{disconnectLoading ? "Disconnecting..." : "Disconnect"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionBtn, (seedLoading || candidatesLoading) && s.actionBtnDisabled]}
+              onPress={handleSeedDemoCandidates}
+              disabled={seedLoading || candidatesLoading}
+            >
+              <Text style={s.actionBtnText}>{seedLoading ? "Seeding..." : "Seed Demo"}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={s.discoveryDivider} />
+          <Text style={s.discoverySubLabel}>Pending Candidates</Text>
+          {candidatesLoading ? (
+            <ActivityIndicator style={s.discoveryLoader} color={colors.primary} />
+          ) : candidates.length === 0 ? (
+            <Text style={s.emptyText}>No pending candidates.</Text>
+          ) : (
+            candidates.map((candidate, index) => {
+              const id = candidate?.id;
+              const isActing = candidateActionId === id;
+              const canAct = Boolean(id) && !isActing;
+              const merchant = candidate?.merchant || candidate?.merchant_name || candidate?.name || "Unknown merchant";
+              const amount = formatCurrency(candidate?.amount, candidate?.currency || "USD");
+              const confidence = formatConfidence(candidate?.confidence);
+
+              return (
+                <View key={id ? String(id) : `candidate-${index}`} style={s.candidateCard}>
+                  <View style={s.candidateTopRow}>
+                    <Text style={s.candidateMerchant}>{merchant}</Text>
+                    <Text style={s.candidateMeta}>{amount}</Text>
+                  </View>
+                  <Text style={s.candidateMeta}>Confidence: {confidence}</Text>
+                  <View style={s.candidateActionRow}>
+                    <TouchableOpacity
+                      style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
+                      onPress={() => handleCandidateAction(id, "accept")}
+                      disabled={!canAct}
+                    >
+                      <Text style={s.candidateBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
+                      onPress={() => handleCandidateAction(id, "reject")}
+                      disabled={!canAct}
+                    >
+                      <Text style={s.candidateBtnText}>Reject</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
+                      onPress={() => handleCandidateAction(id, "false-positive")}
+                      disabled={!canAct}
+                    >
+                      <Text style={s.candidateBtnText}>False Positive</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+          {!!candidatesError && <Text style={s.errorText}>{candidatesError}</Text>}
+        </StaggerReveal>
+
         <StaggerReveal style={s.section} delay={220} profile="smooth">
           <Text style={s.sectionLabel}>Account Actions</Text>
           <Row label="Log out" onPress={handleLogout} isDanger />
@@ -162,6 +402,60 @@ const s = StyleSheet.create({
   rowValue: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 13, maxWidth: "60%" },
   rowChevron: { fontFamily: "Inter_700Bold", color: colors.text4, fontSize: 17 },
   prefHint: { marginTop: 4, fontFamily: "Inter_400Regular", color: colors.text4, fontSize: 12, lineHeight: 18 },
+
+  discoveryHint: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 13, marginBottom: 4 },
+  discoverySubLabel: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 13, marginBottom: 8 },
+  discoveryLoader: { marginVertical: 10 },
+  discoveryDivider: { height: 1, backgroundColor: colors.border2, marginVertical: 10 },
+  formRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border2,
+    borderRadius: 12,
+    backgroundColor: colors.bg2,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontFamily: "Inter_400Regular",
+    color: colors.text,
+    fontSize: 13,
+  },
+  inputCompact: { flex: 0.8 },
+  inputWide: { flex: 1.2 },
+  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  actionBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(18,94,89,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  actionBtnDisabled: { opacity: 0.5 },
+  actionBtnText: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 12 },
+  emptyText: { fontFamily: "Inter_400Regular", color: colors.text4, fontSize: 13 },
+  errorText: { marginTop: 8, fontFamily: "Inter_500Medium", color: colors.error, fontSize: 12 },
+
+  candidateCard: {
+    borderWidth: 1,
+    borderColor: colors.border2,
+    borderRadius: 12,
+    backgroundColor: colors.bg2,
+    padding: 10,
+    marginBottom: 8,
+  },
+  candidateTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  candidateMerchant: { flex: 1, fontFamily: "Inter_600SemiBold", color: colors.text, fontSize: 14 },
+  candidateMeta: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 12, marginTop: 4 },
+  candidateActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 9 },
+  candidateBtn: {
+    borderWidth: 1,
+    borderColor: colors.border2,
+    borderRadius: 10,
+    backgroundColor: colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  candidateBtnText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 12 },
 
   version: { fontFamily: "Inter_500Medium", color: colors.text4, textAlign: "center", marginTop: 6, fontSize: 12 },
 });

@@ -31,8 +31,18 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
-from database import init_db, get_db, User, Subscription, Payment, FREE_SUBSCRIPTION_LIMIT
+from database import (
+    init_db,
+    get_db,
+    User,
+    Subscription,
+    Payment,
+    MailboxConnection,
+    DiscoveryCandidate,
+    FREE_SUBSCRIPTION_LIMIT,
+)
 from auth import create_access_token, get_current_user, verify_token
 
 
@@ -104,6 +114,23 @@ class CancellationOutcomeRequest(BaseModel):
     outcome: str
 
 
+class MailboxConnectRequest(BaseModel):
+    provider: str
+    email: str
+    scopes: Optional[str] = None
+    token: Optional[str] = None
+    refresh_token: Optional[str] = None
+
+
+class DiscoveryAcceptRequest(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    billing_cycle: Optional[str] = None
+    next_billing_date: Optional[str] = None
+
+
 # ─────────────────────────────────────────────
 # App Setup
 # ─────────────────────────────────────────────
@@ -125,6 +152,13 @@ def _safe_int_env(name: str, default: int) -> int:
     except (TypeError, ValueError):
         return default
 
+
+def _safe_float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
@@ -137,6 +171,8 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+PRICE_CHANGE_ALERT_THRESHOLD_PCT = max(1.0, _safe_float_env("PRICE_CHANGE_ALERT_THRESHOLD_PCT", 10.0))
+MIN_AMOUNT_CHANGE_NOISE_PCT = 1.0
 
 logger = logging.getLogger("subtrack")
 
@@ -336,6 +372,7 @@ def _parse_date(date_str: str) -> datetime:
 
 
 ALLOWED_BILLING_CYCLES = {"monthly", "yearly", "weekly"}
+ALLOWED_DISCOVERY_CANDIDATE_STATUSES = {"pending", "accepted", "rejected", "false_positive"}
 
 
 def _normalize_billing_cycle(value: Optional[str]) -> str:
@@ -363,6 +400,34 @@ def _normalize_cancel_url(value: Optional[str]) -> Optional[str]:
     if parsed.scheme not in {"http", "https"}:
         raise HTTPException(status_code=400, detail="cancel_url must start with http:// or https://")
     return cleaned
+
+
+def _normalize_provider(value: str) -> str:
+    provider = (value or "").strip().lower()
+    if not provider:
+        raise HTTPException(status_code=400, detail="provider is required")
+    if not re.match(r"^[a-z0-9_-]{2,32}$", provider):
+        raise HTTPException(status_code=400, detail="provider format is invalid")
+    return provider
+
+
+def _normalize_email(value: str) -> str:
+    email = (value or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    return email
+
+
+def _normalize_candidate_status(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    status = value.strip().lower()
+    if status not in ALLOWED_DISCOVERY_CANDIDATE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="status must be one of: pending, accepted, rejected, false_positive",
+        )
+    return status
 
 
 @app.get("/api/subscriptions")
@@ -424,6 +489,270 @@ def create_subscription(
     db.commit()
     db.refresh(sub)
     return _sub_dict(sub)
+
+
+@app.get("/api/discovery/mailbox")
+def get_mailbox_connection(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    mailbox = db.query(MailboxConnection).filter(
+        MailboxConnection.user_id == current_user.id,
+        MailboxConnection.status == "connected",
+    ).order_by(MailboxConnection.connected_at.desc(), MailboxConnection.id.desc()).first()
+    return {"mailbox": _mailbox_dict(mailbox)}
+
+
+@app.post("/api/discovery/mailbox/connect")
+def connect_mailbox(
+    req: MailboxConnectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    provider = _normalize_provider(req.provider)
+    email = _normalize_email(req.email)
+
+    mailbox = db.query(MailboxConnection).filter(
+        MailboxConnection.user_id == current_user.id,
+        MailboxConnection.provider == provider,
+        MailboxConnection.email == email,
+    ).first()
+
+    now = datetime.utcnow()
+    if mailbox is None:
+        mailbox = MailboxConnection(
+            user_id=current_user.id,
+            provider=provider,
+            email=email,
+            status="connected",
+            connected_at=now,
+            scopes=(req.scopes.strip() if req.scopes else None),
+            # Token persistence is intentionally disabled in v1.
+            access_token_encrypted=None,
+            refresh_token_encrypted=None,
+        )
+        db.add(mailbox)
+    else:
+        mailbox.provider = provider
+        mailbox.email = email
+        mailbox.status = "connected"
+        mailbox.connected_at = now
+        mailbox.updated_at = now
+        mailbox.scopes = req.scopes.strip() if req.scopes else mailbox.scopes
+        # Clear any previously stored token values for this milestone.
+        mailbox.access_token_encrypted = None
+        mailbox.refresh_token_encrypted = None
+
+    db.commit()
+    db.refresh(mailbox)
+    return {
+        "mailbox": _mailbox_dict(mailbox),
+        "token_storage": "disabled_in_v1",
+    }
+
+
+@app.post("/api/discovery/mailbox/disconnect")
+def disconnect_mailbox(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    mailboxes = db.query(MailboxConnection).filter(
+        MailboxConnection.user_id == current_user.id,
+        MailboxConnection.status == "connected",
+    ).all()
+
+    now = datetime.utcnow()
+    for mailbox in mailboxes:
+        mailbox.status = "disconnected"
+        mailbox.access_token_encrypted = None
+        mailbox.refresh_token_encrypted = None
+        mailbox.updated_at = now
+
+    db.commit()
+    return {"disconnected": len(mailboxes)}
+
+
+@app.get("/api/discovery/candidates")
+def list_discovery_candidates(
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    normalized_status = _normalize_candidate_status(status)
+    q = db.query(DiscoveryCandidate).filter(DiscoveryCandidate.user_id == current_user.id)
+    if normalized_status:
+        q = q.filter(DiscoveryCandidate.status == normalized_status)
+    candidates = q.order_by(DiscoveryCandidate.created_at.desc(), DiscoveryCandidate.id.desc()).all()
+    return {"items": [_candidate_dict(c) for c in candidates]}
+
+
+@app.post("/api/discovery/candidates/seed-demo")
+def seed_demo_discovery_candidates(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    existing_count = db.query(DiscoveryCandidate).filter(
+        DiscoveryCandidate.user_id == current_user.id
+    ).count()
+    if existing_count == 0:
+        source_connection = db.query(MailboxConnection).filter(
+            MailboxConnection.user_id == current_user.id,
+            MailboxConnection.status == "connected",
+        ).order_by(MailboxConnection.connected_at.desc(), MailboxConnection.id.desc()).first()
+
+        seeds = [
+            DiscoveryCandidate(
+                user_id=current_user.id,
+                source_connection_id=source_connection.id if source_connection else None,
+                merchant_name="Spotify Premium",
+                amount=10.99,
+                currency="USD",
+                billing_cycle_guess="monthly",
+                next_billing_date_guess=datetime.utcnow() + timedelta(days=10),
+                confidence=0.92,
+                source_type="email_receipt",
+                source_message_id="demo-spotify-001",
+                raw_excerpt="Thanks for your Spotify Premium payment of USD 10.99.",
+                status="pending",
+            ),
+            DiscoveryCandidate(
+                user_id=current_user.id,
+                source_connection_id=source_connection.id if source_connection else None,
+                merchant_name="Notion",
+                amount=8.00,
+                currency="USD",
+                billing_cycle_guess="monthly",
+                next_billing_date_guess=datetime.utcnow() + timedelta(days=21),
+                confidence=0.84,
+                source_type="email_receipt",
+                source_message_id="demo-notion-001",
+                raw_excerpt="Your Notion plan was renewed for USD 8.00.",
+                status="pending",
+            ),
+            DiscoveryCandidate(
+                user_id=current_user.id,
+                source_connection_id=source_connection.id if source_connection else None,
+                merchant_name="AWS",
+                amount=None,
+                currency="USD",
+                billing_cycle_guess="monthly",
+                next_billing_date_guess=datetime.utcnow() + timedelta(days=5),
+                confidence=0.61,
+                source_type="email_receipt",
+                source_message_id="demo-aws-001",
+                raw_excerpt="Your monthly AWS billing statement is ready.",
+                status="pending",
+            ),
+        ]
+        db.add_all(seeds)
+        db.commit()
+
+    items = db.query(DiscoveryCandidate).filter(
+        DiscoveryCandidate.user_id == current_user.id
+    ).order_by(DiscoveryCandidate.created_at.desc(), DiscoveryCandidate.id.desc()).all()
+    return {"created": existing_count == 0, "items": [_candidate_dict(c) for c in items]}
+
+
+@app.post("/api/discovery/candidates/{candidate_id}/accept")
+def accept_discovery_candidate(
+    candidate_id: int,
+    req: Optional[DiscoveryAcceptRequest] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    req_data = req or DiscoveryAcceptRequest()
+
+    candidate = _get_candidate_or_404(candidate_id, current_user.id, db)
+    if candidate.status == "accepted":
+        raise HTTPException(status_code=409, detail="Candidate already accepted")
+
+    active_count = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id,
+        Subscription.is_active == True
+    ).count()
+    if not current_user.can_add_subscription(active_count):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Free plan limited to {FREE_SUBSCRIPTION_LIMIT} active subscriptions. Upgrade to Pro for unlimited.",
+        )
+
+    name = (req_data.name.strip() if req_data.name else candidate.merchant_name).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    amount = req_data.amount if req_data.amount is not None else candidate.amount
+    if amount is None or amount <= 0:
+        raise HTTPException(status_code=400, detail="amount must be greater than 0")
+
+    currency = (req_data.currency.strip().upper() if req_data.currency else (candidate.currency or "USD").upper())
+    billing_cycle = _normalize_billing_cycle(req_data.billing_cycle or candidate.billing_cycle_guess or "monthly")
+
+    if req_data.next_billing_date:
+        next_billing_date = _parse_date(req_data.next_billing_date)
+    elif candidate.next_billing_date_guess:
+        next_billing_date = candidate.next_billing_date_guess
+    else:
+        next_billing_date = datetime.utcnow() + timedelta(days=30)
+
+    category = req_data.category.strip() if req_data.category else "Other"
+    if not category:
+        category = "Other"
+
+    sub = Subscription(
+        user_id=current_user.id,
+        name=name,
+        category=category,
+        amount=amount,
+        currency=currency,
+        billing_cycle=billing_cycle,
+        next_billing_date=next_billing_date,
+        is_active=True,
+    )
+    db.add(sub)
+    db.flush()
+
+    candidate.status = "accepted"
+    candidate.accepted_subscription_id = sub.id
+    candidate.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(candidate)
+    return {
+        "candidate": _candidate_dict(candidate),
+        "subscription": _sub_dict(sub),
+    }
+
+
+@app.post("/api/discovery/candidates/{candidate_id}/reject")
+def reject_discovery_candidate(
+    candidate_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    candidate = _get_candidate_or_404(candidate_id, current_user.id, db)
+    if candidate.status == "accepted":
+        raise HTTPException(status_code=409, detail="Accepted candidate cannot be rejected")
+    candidate.status = "rejected"
+    candidate.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(candidate)
+    return {"candidate": _candidate_dict(candidate)}
+
+
+@app.post("/api/discovery/candidates/{candidate_id}/false-positive")
+def false_positive_discovery_candidate(
+    candidate_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    candidate = _get_candidate_or_404(candidate_id, current_user.id, db)
+    if candidate.status == "accepted":
+        raise HTTPException(status_code=409, detail="Accepted candidate cannot be marked false_positive")
+    candidate.status = "false_positive"
+    candidate.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(candidate)
+    return {"candidate": _candidate_dict(candidate)}
 
 
 @app.get("/api/subscriptions/export.csv")
@@ -520,6 +849,19 @@ def update_subscription(
     if req.amount is not None:
         if req.amount <= 0:
             raise HTTPException(status_code=400, detail="amount must be greater than 0")
+        previous_amount = sub.amount
+        amount_changed = abs(req.amount - previous_amount) > 1e-9
+        if amount_changed:
+            change_pct = _compute_amount_change_pct(previous_amount, req.amount)
+            sub.last_amount = previous_amount
+            sub.amount_change_pct = change_pct
+            sub.amount_changed_at = datetime.utcnow()
+            if (
+                change_pct is not None
+                and abs(change_pct) >= MIN_AMOUNT_CHANGE_NOISE_PCT
+                and abs(change_pct) >= PRICE_CHANGE_ALERT_THRESHOLD_PCT
+            ):
+                sub.amount_alert_dismissed = False
         sub.amount = req.amount
     if req.currency is not None:
         sub.currency = req.currency
@@ -687,6 +1029,55 @@ def action_center_renewal_risk(
     }
 
 
+@app.get("/api/action-center/price-anomalies")
+def action_center_price_anomalies(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    limit = max(1, min(limit, 200))
+    subs = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id,
+        Subscription.is_active == True,
+        Subscription.amount_alert_dismissed == False,
+        Subscription.amount_change_pct.isnot(None),
+        Subscription.amount_changed_at.isnot(None),
+        func.abs(Subscription.amount_change_pct) >= MIN_AMOUNT_CHANGE_NOISE_PCT,
+        func.abs(Subscription.amount_change_pct) >= PRICE_CHANGE_ALERT_THRESHOLD_PCT,
+    ).order_by(Subscription.amount_changed_at.desc()).limit(limit).all()
+
+    items = []
+    for sub in subs:
+        item = _sub_dict(sub)
+        item["previous_amount"] = sub.last_amount
+        item["current_amount"] = sub.amount
+        item["change_pct"] = sub.amount_change_pct
+        item["changed_at"] = sub.amount_changed_at.isoformat() if sub.amount_changed_at else None
+        items.append(item)
+
+    return {
+        "threshold_pct": PRICE_CHANGE_ALERT_THRESHOLD_PCT,
+        "limit": limit,
+        "count": len(items),
+        "items": items,
+    }
+
+
+@app.post("/api/subscriptions/{sub_id}/dismiss-amount-alert")
+def dismiss_amount_alert(
+    sub_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    sub = _get_sub_or_404(sub_id, current_user.id, db)
+    sub.amount_alert_dismissed = True
+    sub.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(sub)
+    return _sub_dict(sub)
+
+
 @app.post("/api/subscriptions/{sub_id}/cancellation-outcome")
 def set_cancellation_outcome(
     sub_id: int,
@@ -839,6 +1230,16 @@ def _get_sub_or_404(sub_id: int, user_id: int, db: Session) -> Subscription:
     return sub
 
 
+def _get_candidate_or_404(candidate_id: int, user_id: int, db: Session) -> DiscoveryCandidate:
+    candidate = db.query(DiscoveryCandidate).filter(
+        DiscoveryCandidate.id == candidate_id,
+        DiscoveryCandidate.user_id == user_id,
+    ).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Discovery candidate not found")
+    return candidate
+
+
 def _monthly_cost(sub: Subscription) -> float:
     if sub.billing_cycle == "yearly":
         return sub.amount / 12
@@ -847,12 +1248,63 @@ def _monthly_cost(sub: Subscription) -> float:
     return sub.amount  # monthly
 
 
+def _compute_amount_change_pct(previous_amount: Optional[float], new_amount: float) -> Optional[float]:
+    if previous_amount is None:
+        return None
+    if previous_amount == 0:
+        if new_amount == 0:
+            return 0.0
+        return None
+    return ((new_amount - previous_amount) / previous_amount) * 100.0
+
+
+def _mailbox_dict(mailbox: Optional[MailboxConnection]) -> Optional[dict]:
+    if mailbox is None:
+        return None
+    return {
+        "id": mailbox.id,
+        "provider": mailbox.provider,
+        "email": mailbox.email,
+        "scopes": mailbox.scopes,
+        "status": mailbox.status,
+        "connected_at": mailbox.connected_at.isoformat() if mailbox.connected_at else None,
+        "last_synced_at": mailbox.last_synced_at.isoformat() if mailbox.last_synced_at else None,
+        "created_at": mailbox.created_at.isoformat() if mailbox.created_at else None,
+        "updated_at": mailbox.updated_at.isoformat() if mailbox.updated_at else None,
+    }
+
+
+def _candidate_dict(candidate: DiscoveryCandidate) -> dict:
+    return {
+        "id": candidate.id,
+        "user_id": candidate.user_id,
+        "source_connection_id": candidate.source_connection_id,
+        "merchant_name": candidate.merchant_name,
+        "amount": candidate.amount,
+        "currency": candidate.currency,
+        "billing_cycle_guess": candidate.billing_cycle_guess,
+        "next_billing_date_guess": candidate.next_billing_date_guess.isoformat() if candidate.next_billing_date_guess else None,
+        "confidence": candidate.confidence,
+        "source_type": candidate.source_type,
+        "source_message_id": candidate.source_message_id,
+        "raw_excerpt": candidate.raw_excerpt,
+        "status": candidate.status,
+        "accepted_subscription_id": candidate.accepted_subscription_id,
+        "created_at": candidate.created_at.isoformat() if candidate.created_at else None,
+        "updated_at": candidate.updated_at.isoformat() if candidate.updated_at else None,
+    }
+
+
 def _sub_dict(sub: Subscription) -> dict:
     return {
         "id": sub.id,
         "name": sub.name,
         "category": sub.category,
         "amount": sub.amount,
+        "last_amount": sub.last_amount,
+        "amount_change_pct": sub.amount_change_pct,
+        "amount_changed_at": sub.amount_changed_at.isoformat() if sub.amount_changed_at else None,
+        "amount_alert_dismissed": sub.amount_alert_dismissed,
         "currency": sub.currency,
         "billing_cycle": sub.billing_cycle,
         "next_billing_date": sub.next_billing_date.isoformat() if sub.next_billing_date else None,
