@@ -18,9 +18,11 @@ const FREE_LIMIT = 10;
 export default function DashboardScreen({ navigation }) {
   const [subs, setSubs] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [actionCenterItems, setActionCenterItems] = useState([]);
   const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [actionLoadingMap, setActionLoadingMap] = useState({});
   const [modalVisible, setModalVisible] = useState(false);
   const [editSub, setEditSub] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
@@ -31,10 +33,16 @@ export default function DashboardScreen({ navigation }) {
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [subsData, analyticsData, meData] = await Promise.all([api.listSubs(), api.analytics(), api.me()]);
+      const [subsData, analyticsData, meData, actionCenterData] = await Promise.all([
+        api.listSubs(),
+        api.analytics(),
+        api.me(),
+        api.actionCenterRisk(30, 20),
+      ]);
       setSubs(subsData);
       setAnalytics(analyticsData);
       setUserInfo(meData);
+      setActionCenterItems(actionCenterData?.items || []);
       await AsyncStorage.setItem("st_user", JSON.stringify({ id: meData.user_id, email: meData.email, name: meData.full_name, plan: meData.plan }));
 
       const reminderPref = await AsyncStorage.getItem("st_notifications");
@@ -102,6 +110,29 @@ export default function DashboardScreen({ navigation }) {
     setModalVisible(false);
     setEditSub(null);
     fetchAll();
+  };
+
+  const reasonLabel = (reason) => {
+    if (reason === "low_usage") return "Low usage";
+    if (reason === "due_within_7_days") return "Due in 7 days";
+    if (reason === "due_within_30_days") return "Due in 30 days";
+    return reason;
+  };
+
+  const handleActionOutcome = async (id, outcome) => {
+    setActionLoadingMap((prev) => ({ ...prev, [id]: true }));
+    try {
+      await api.setCancellationOutcome(id, outcome);
+      await fetchAll(true);
+    } catch (e) {
+      Alert.alert("Action failed", e.message || "Could not update cancellation outcome.");
+    } finally {
+      setActionLoadingMap((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   };
 
   const filteredSubs = subs.filter((s) => {
@@ -182,6 +213,51 @@ export default function DashboardScreen({ navigation }) {
             <AnalyticsPanel analytics={analytics} />
           </StaggerReveal>
         )}
+
+        <View style={s.actionCenterWrap}>
+          <View style={s.actionCenterHead}>
+            <Text style={s.actionCenterTitle}>Action Center</Text>
+            <Text style={s.actionCenterMeta}>{actionCenterItems.length} at-risk renewals</Text>
+          </View>
+          {actionCenterItems.length === 0 ? (
+            <Text style={s.actionCenterEmpty}>No at-risk renewals in the next 30 days.</Text>
+          ) : (
+            actionCenterItems.map((item) => {
+              const isBusy = !!actionLoadingMap[item.id];
+              return (
+                <View key={item.id} style={s.actionRow}>
+                  <View style={s.actionRowTop}>
+                    <Text style={s.actionName}>{item.name}</Text>
+                    <Text style={s.actionDue}>Due in {item.due_in_days}d</Text>
+                  </View>
+                  <View style={s.tagRow}>
+                    {(item.reasons || []).map((reason) => (
+                      <View key={`${item.id}-${reason}`} style={s.tagChip}>
+                        <Text style={s.tagText}>{reasonLabel(reason)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={s.actionButtons}>
+                    <TouchableOpacity
+                      onPress={() => handleActionOutcome(item.id, "kept")}
+                      disabled={isBusy}
+                      style={[s.outcomeBtn, isBusy && s.outcomeBtnDisabled]}
+                    >
+                      <Text style={s.outcomeBtnText}>Keep</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleActionOutcome(item.id, "cancelled")}
+                      disabled={isBusy}
+                      style={[s.outcomeBtn, s.outcomeBtnDanger, isBusy && s.outcomeBtnDisabled]}
+                    >
+                      <Text style={[s.outcomeBtnText, s.outcomeBtnDangerText]}>Cancelled</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filters} contentContainerStyle={s.filtersInner}>
           {["all", "active", "inactive"].map((tab) => (
@@ -279,6 +355,55 @@ const s = StyleSheet.create({
   reminderText: { fontFamily: "Inter_500Medium", color: colors.text2, fontSize: 12, lineHeight: 17 },
 
   analyticsWrap: { paddingHorizontal: 20, marginBottom: 6 },
+
+  actionCenterWrap: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border2,
+    backgroundColor: colors.card,
+    padding: 12,
+  },
+  actionCenterHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  actionCenterTitle: { fontFamily: "Inter_700Bold", color: colors.text, fontSize: 14 },
+  actionCenterMeta: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 11 },
+  actionCenterEmpty: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 12, lineHeight: 17 },
+  actionRow: {
+    borderWidth: 1,
+    borderColor: colors.border2,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    padding: 10,
+    marginTop: 8,
+  },
+  actionRowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  actionName: { flex: 1, fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 13 },
+  actionDue: { fontFamily: "Inter_600SemiBold", color: colors.warning, fontSize: 11 },
+  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  tagChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(18,94,89,0.20)",
+    backgroundColor: "rgba(18,94,89,0.08)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  tagText: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 10 },
+  actionButtons: { flexDirection: "row", gap: 8, marginTop: 10 },
+  outcomeBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border2,
+    backgroundColor: colors.bg2,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  outcomeBtnDanger: { borderColor: "rgba(194,65,12,0.40)", backgroundColor: "rgba(194,65,12,0.08)" },
+  outcomeBtnDisabled: { opacity: 0.55 },
+  outcomeBtnText: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 12 },
+  outcomeBtnDangerText: { color: colors.warning },
 
   filters: { marginBottom: 8 },
   filtersInner: { paddingHorizontal: 20, gap: 8, alignItems: "center" },

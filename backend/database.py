@@ -122,6 +122,10 @@ class Subscription(Base):
     # Direct cancellation URL for this service
     cancel_url = Column(String, nullable=True)
 
+    # Tracks post-cancellation user decision for Action Center
+    cancellation_outcome = Column(String, nullable=True)  # kept, cancelled
+    cancellation_outcome_at = Column(DateTime, nullable=True)
+
     # Logo / color for display
     color = Column(String, nullable=True)  # hex color
 
@@ -160,6 +164,8 @@ def init_db():
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_used_at TIMESTAMP"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_password_reset_token ON users (password_reset_token)"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome VARCHAR"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome_at TIMESTAMP"))
     print("✅ Database initialized successfully!")
 
 

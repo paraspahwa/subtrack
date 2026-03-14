@@ -100,6 +100,10 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class CancellationOutcomeRequest(BaseModel):
+    outcome: str
+
+
 # ─────────────────────────────────────────────
 # App Setup
 # ─────────────────────────────────────────────
@@ -623,6 +627,85 @@ def upcoming_reminders(
     return {"days": days, "count": len(items), "items": items}
 
 
+@app.get("/api/action-center/renewal-risk")
+def action_center_renewal_risk(
+    days: int = 30,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    days = max(1, min(days, 90))
+    limit = max(1, min(limit, 100))
+    now = datetime.utcnow()
+
+    subs = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id,
+        Subscription.is_active == True
+    ).all()
+
+    risky_items = []
+    for sub in subs:
+        if not sub.next_billing_date:
+            continue
+
+        due_in_days = (sub.next_billing_date.date() - now.date()).days
+        if due_in_days < 0 or due_in_days > days:
+            continue
+
+        score = 0
+        reasons = []
+
+        if sub.usage_rating is not None and sub.usage_rating <= 2:
+            score += 2
+            reasons.append("low_usage")
+
+        if due_in_days <= 7:
+            score += 2
+            reasons.append("due_within_7_days")
+        elif due_in_days <= 30:
+            score += 1
+            reasons.append("due_within_30_days")
+
+        if score >= 2:
+            item = _sub_dict(sub)
+            item["score"] = score
+            item["reasons"] = reasons
+            item["due_in_days"] = due_in_days
+            risky_items.append(item)
+
+    risky_items.sort(key=lambda x: (-x["score"], x["due_in_days"], x["next_billing_date"] or ""))
+    risky_items = risky_items[:limit]
+    return {
+        "days": days,
+        "limit": limit,
+        "count": len(risky_items),
+        "items": risky_items,
+    }
+
+
+@app.post("/api/subscriptions/{sub_id}/cancellation-outcome")
+def set_cancellation_outcome(
+    sub_id: int,
+    req: CancellationOutcomeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    outcome = (req.outcome or "").strip().lower()
+    if outcome not in {"kept", "cancelled"}:
+        raise HTTPException(status_code=400, detail="outcome must be one of: kept, cancelled")
+
+    sub = _get_sub_or_404(sub_id, current_user.id, db)
+    sub.cancellation_outcome = outcome
+    sub.cancellation_outcome_at = datetime.utcnow()
+    if outcome == "cancelled":
+        sub.is_active = False
+    sub.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(sub)
+    return _sub_dict(sub)
+
+
 # ─────────────────────────────────────────────
 # Payments (Razorpay)
 # ─────────────────────────────────────────────
@@ -775,6 +858,8 @@ def _sub_dict(sub: Subscription) -> dict:
         "color": sub.color,
         "usage_rating": sub.usage_rating,
         "cancel_url": sub.cancel_url,
+        "cancellation_outcome": sub.cancellation_outcome,
+        "cancellation_outcome_at": sub.cancellation_outcome_at.isoformat() if sub.cancellation_outcome_at else None,
         "monthly_cost": round(_monthly_cost(sub), 2),
         "created_at": sub.created_at.isoformat() if sub.created_at else None,
     }

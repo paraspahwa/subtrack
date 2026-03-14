@@ -39,6 +39,11 @@ export const api = {
   // Analytics
   analytics: () => request("/api/analytics"),
   reminderCandidates: (days = 30) => request(`/api/reminders/upcoming?days=${days}`),
+  actionCenterRisk: (days = 30, limit = 20) => request(`/api/action-center/renewal-risk?days=${days}&limit=${limit}`),
+  setCancellationOutcome: (id, outcome) => request(`/api/subscriptions/${id}/cancellation-outcome`, {
+    method: "POST",
+    body: JSON.stringify({ outcome }),
+  }),
 
   // Export
   exportCsvUrl: () => `${API_URL}/api/subscriptions/export.csv`,
