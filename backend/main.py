@@ -645,6 +645,10 @@ def action_center_renewal_risk(
 
     risky_items = []
     for sub in subs:
+        # V1 deterministic behavior: once user chooses "kept", hide from risk list.
+        if (sub.cancellation_outcome or "").strip().lower() == "kept":
+            continue
+
         if not sub.next_billing_date:
             continue
 

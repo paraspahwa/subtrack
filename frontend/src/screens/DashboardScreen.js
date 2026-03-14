@@ -33,21 +33,26 @@ export default function DashboardScreen({ navigation }) {
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [subsData, analyticsData, meData, actionCenterData] = await Promise.all([
+      const [subsData, analyticsData, meData] = await Promise.all([
         api.listSubs(),
         api.analytics(),
         api.me(),
-        api.actionCenterRisk(30, 20),
       ]);
       setSubs(subsData);
       setAnalytics(analyticsData);
       setUserInfo(meData);
-      setActionCenterItems(actionCenterData?.items || []);
       await AsyncStorage.setItem("st_user", JSON.stringify({ id: meData.user_id, email: meData.email, name: meData.full_name, plan: meData.plan }));
 
       const reminderPref = await AsyncStorage.getItem("st_notifications");
       const remindersOn = reminderPref === "true";
       setNotificationsEnabled(remindersOn);
+
+      try {
+        const actionCenterData = await api.actionCenterRisk(30, 20);
+        setActionCenterItems(actionCenterData?.items || []);
+      } catch {
+        setActionCenterItems([]);
+      }
 
       if (remindersOn && Platform.OS !== "web") {
         const reminderData = await api.reminderCandidates(30);
@@ -133,6 +138,17 @@ export default function DashboardScreen({ navigation }) {
         return next;
       });
     }
+  };
+
+  const confirmCancelledOutcome = (id) => {
+    Alert.alert("Mark as Cancelled", "Are you sure you want to mark this subscription as cancelled?", [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Mark Cancelled",
+        style: "destructive",
+        onPress: () => handleActionOutcome(id, "cancelled"),
+      },
+    ]);
   };
 
   const filteredSubs = subs.filter((s) => {
@@ -246,7 +262,7 @@ export default function DashboardScreen({ navigation }) {
                       <Text style={s.outcomeBtnText}>Keep</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => handleActionOutcome(item.id, "cancelled")}
+                      onPress={() => confirmCancelledOutcome(item.id)}
                       disabled={isBusy}
                       style={[s.outcomeBtn, s.outcomeBtnDanger, isBusy && s.outcomeBtnDisabled]}
                     >
