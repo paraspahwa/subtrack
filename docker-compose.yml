@@ -1,69 +1,61 @@
 # ─────────────────────────────────────────────────────────────────────
-# SubTrack — Docker Compose
+# SubTrack — Docker Compose (Supabase + GitHub Secrets)
 #
-# Production (Supabase):
-#   Set DATABASE_URL in .env to your Supabase connection string.
-#   Remove or comment out the `postgres` service below.
-#   Run: docker compose up backend frontend
+# LOCAL DEV:  docker compose up --build
+# CI/CD:      Variables injected via GitHub Secrets → environment:
 #
-# Local development (self-hosted Postgres):
-#   Keep the postgres service, use Option B DATABASE_URL in .env.
-#   Run: docker compose up
+# Required GitHub Secrets:
+#   DATABASE_URL, SECRET_KEY, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
+#   RAZORPAY_WEBHOOK_SECRET, NEXT_PUBLIC_API_URL
 # ─────────────────────────────────────────────────────────────────────
 
 services:
-
-  # ── Local Postgres (comment out when using Supabase) ─────────────
-  #postgres:
-   # image: postgres:15-alpine
-   # container_name: subtrack_db
-   # environment:
-   #   POSTGRES_USER: postgres
-   #   POSTGRES_PASSWORD: postgres
-   #   POSTGRES_DB: subtrack
-   # ports:
-   #   - "5432:5432"
-   # volumes:
-     # - postgres_data:/var/lib/postgresql/data
-    #healthcheck:
-    #  test: ["CMD-SHELL", "pg_isready -U postgres"]
-    #  interval: 10s
-    #    timeout: 5s
-    #    retries: 5
-    #restart: unless-stopped
-
   backend:
     build: ./backend
     container_name: subtrack_backend
     ports:
       - "8000:8000"
-    env_file:
-      - .env.example   # Use .env in production
-    # When using Supabase, remove the environment override below
-    # and set BACKEND_DATABASE_URL in your environment instead.
     environment:
-      DATABASE_URL: ${BACKEND_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/subtrack}
-      SECRET_KEY: ${SECRET_KEY:-change-me-generate-with-openssl-rand-hex-32}
+      # All values use ${VAR:-fallback} pattern
+      # GitHub Actions will inject secrets as env vars before docker compose up
+      
+      # Database (Supabase)
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_SECONDS: ${ACCESS_TOKEN_EXPIRE_SECONDS:-86400}
       RETURN_RESET_TOKEN: ${RETURN_RESET_TOKEN:-false}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
-    depends_on:
-      postgres:
-        condition: service_healthy
+      
+      # Payments (Razorpay)
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+      
+      # CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build-time args (baked into image)
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: subtrack_frontend
     ports:
       - "3000:3000"
+    environment:
+      # Runtime env vars
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-    driver: local
