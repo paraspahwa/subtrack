@@ -327,24 +327,25 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
             </View>
           )}
 
-          {/* Action buttons */}
-          <View style={s.btnRow}>
-            <TouchableOpacity onPress={onClose} style={s.cancelBtn}>
-              <Text style={s.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            {loading ? (
-              <View style={s.saveBtnLoading}>
-                <ActivityIndicator color="#fff" size="small" />
-              </View>
-            ) : (
-              <TouchableOpacity onPress={handleSubmit} style={s.saveBtn}>
-                <LinearGradient colors={[colors.primary, colors.primaryLight]} style={s.saveBtnGradient}>
-                  <Text style={s.saveBtnText}>{isEdit ? "Save changes" : "Add subscription"}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
-          </View>
         </ScrollView>
+
+        {/* Sticky action buttons */}
+        <View style={s.stickyBar}>
+          <TouchableOpacity onPress={onClose} style={s.cancelBtn}>
+            <Text style={s.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+          {loading ? (
+            <View style={s.saveBtnLoading}>
+              <ActivityIndicator color="#fff" size="small" />
+            </View>
+          ) : (
+            <TouchableOpacity onPress={handleSubmit} style={s.saveBtn}>
+              <LinearGradient colors={[colors.primary, colors.primaryLight]} style={s.saveBtnGradient}>
+                <Text style={s.saveBtnText}>{isEdit ? "Save changes" : "Add subscription"}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </Modal>
   );
@@ -368,7 +369,12 @@ const s = StyleSheet.create({
   closeTxt: { fontFamily: "Inter_700Bold", color: colors.text3, fontSize: 13 },
 
   scroll:       { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 50 },
+  scrollContent: { padding: 20, paddingBottom: 16 },
+
+  stickyBar: {
+    flexDirection: "row", gap: 10, padding: 14, paddingBottom: Platform.OS === "ios" ? 28 : 14,
+    borderTopWidth: 1, borderTopColor: colors.border2, backgroundColor: colors.card,
+  },
 
   section:        { marginBottom: 20 },
   sectionLabel:   { fontFamily: "Inter_700Bold", fontSize: 13, color: colors.primary },
@@ -436,7 +442,6 @@ const s = StyleSheet.create({
   ratingHintPill: { marginTop: 10, alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   ratingHintText: { fontFamily: "Inter_700Bold", fontSize: 12 },
 
-  btnRow:         { flexDirection: "row", gap: 10, marginTop: 12 },
   cancelBtn:      {
     flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1,
     borderColor: colors.border2, backgroundColor: colors.bg3, alignItems: "center",

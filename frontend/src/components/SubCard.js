@@ -51,7 +51,7 @@ export default function SubCard({ sub, onEdit, onDelete }) {
               <Text style={s.actionEdit}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onDelete(sub.id)} style={[s.actionBtn, s.actionDangerBtn]} hitSlop={6}>
-              <Text style={s.actionDanger}>✕</Text>
+              <Text style={s.actionDanger}>Delete</Text>
             </TouchableOpacity>
           </View>
         </View>

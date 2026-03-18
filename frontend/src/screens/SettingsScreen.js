@@ -6,8 +6,10 @@ import { colors } from "../theme";
 import { api, insforge } from "../api";
 import StaggerReveal from "../components/StaggerReveal";
 import BrandShapes from "../components/BrandShapes";
+import { useTheme } from "../ThemeContext";
 
 export default function SettingsScreen({ navigation }) {
+  const { themeKey, themes, setTheme } = useTheme();
   const [user, setUser] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [mailbox, setMailbox] = useState(null);
@@ -242,6 +244,25 @@ export default function SettingsScreen({ navigation }) {
           </Text>
         </StaggerReveal>
 
+        <StaggerReveal style={s.section} delay={175} profile="smooth">
+          <Text style={s.sectionLabel}>Appearance</Text>
+          <Text style={s.themeLabel}>App color theme</Text>
+          <View style={s.swatchRow}>
+            {Object.entries(themes).map(([key, t]) => (
+              <TouchableOpacity
+                key={key}
+                onPress={() => setTheme(key)}
+                style={[s.swatch, { backgroundColor: t.swatch }, themeKey === key && s.swatchActive]}
+              >
+                {themeKey === key && <Text style={s.swatchCheck}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={s.prefHint}>
+            Theme applies instantly. Current: <Text style={{ fontFamily: "Inter_700Bold" }}>{themes[themeKey]?.label}</Text>
+          </Text>
+        </StaggerReveal>
+
         <StaggerReveal style={s.section} delay={190} profile="smooth">
           <Text style={s.sectionLabel}>Data & Support</Text>
           <Row label="Export as CSV" onPress={handleExportCSV} />
@@ -455,4 +476,18 @@ const s = StyleSheet.create({
   candidateBtnText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 12 },
 
   version: { fontFamily: "Inter_500Medium", color: colors.text4, textAlign: "center", marginTop: 6, fontSize: 12 },
+
+  themeLabel: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 14, marginBottom: 12 },
+  swatchRow: { flexDirection: "row", gap: 12, marginBottom: 10, flexWrap: "wrap" },
+  swatch: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
+  },
+  swatchActive: {
+    borderWidth: 3, borderColor: "#fff",
+    shadowOpacity: 0.3, shadowRadius: 8,
+  },
+  swatchCheck: { color: "#fff", fontFamily: "Inter_800ExtraBold", fontSize: 16 },
 });

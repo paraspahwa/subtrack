@@ -13,6 +13,7 @@ import PricingScreen  from "./src/screens/PricingScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import { colors }     from "./src/theme";
 import { insforge }   from "./src/api";
+import { ThemeProvider } from "./src/ThemeContext";
 
 const Stack = createNativeStackNavigator();
 
@@ -31,7 +32,7 @@ export default function App() {
 	useEffect(() => {
 		(async () => {
 			try {
-				const { data: sessionData, error } = await insforge.auth.getCurrentSession();
+				const { data: sessionData } = await insforge.auth.getCurrentSession();
 				setInitialRoute(sessionData?.session?.user ? "Dashboard" : "Landing");
 			} catch {
 				setInitialRoute("Landing");
@@ -48,6 +49,7 @@ export default function App() {
 	}
 
 	return (
+		<ThemeProvider>
 		<NavigationContainer>
 			<StatusBar style="dark" />
 			<Stack.Navigator
@@ -61,5 +63,6 @@ export default function App() {
 				<Stack.Screen name="Settings"  component={SettingsScreen}  />
 			</Stack.Navigator>
 		</NavigationContainer>
+		</ThemeProvider>
 	);
 }

@@ -149,6 +149,12 @@ export const api = {
 
   // Payments (Edge Functions)
   createOrder: (body) => handle(insforge.functions.invoke("razorpay-order", { body })),
-  
+
   verifyPayment: (body) => handle(insforge.functions.invoke("razorpay-verify", { body })),
+
+  upgradeToPro: async (planType = "pro") => {
+    const { data: userData, error } = await insforge.auth.getCurrentUser();
+    if (error || !userData?.user?.id) throw error || new Error("No active session");
+    return handle(insforge.database.from("profiles").update({ plan: planType }).eq("id", userData.user.id));
+  },
 };

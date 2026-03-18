@@ -8,10 +8,12 @@ import SubCard from "../components/SubCard";
 import SubModal from "../components/SubModal";
 import AnalyticsPanel from "../components/AnalyticsPanel";
 import StaggerReveal from "../components/StaggerReveal";
+import { useTheme } from "../ThemeContext";
 
-const FREE_LIMIT = 10;
+const FREE_LIMIT = 1;
 
 export default function DashboardScreen({ navigation }) {
+  const { theme } = useTheme();
   const [subs, setSubs]                       = useState([]);
   const [analytics, setAnalytics]             = useState(null);
   const [actionCenterItems, setActionCenterItems] = useState([]);
@@ -100,9 +102,9 @@ export default function DashboardScreen({ navigation }) {
     const activeCount = subs.filter((s) => s.is_active).length;
     const isPro = userInfo?.plan !== "free";
     if (!isPro && activeCount >= FREE_LIMIT) {
-      Alert.alert("Free Plan Limit", `You've reached ${FREE_LIMIT} active subscriptions.`, [
+      Alert.alert("Free Plan Limit", "Free accounts can track 1 subscription. Upgrade to Pro for unlimited tracking.", [
         { text: "Later", style: "cancel" },
-        { text: "See Pricing", onPress: () => navigation.navigate("Pricing") },
+        { text: "See Plans", onPress: () => navigation.navigate("Pricing") },
       ]);
       return;
     }
@@ -195,7 +197,7 @@ export default function DashboardScreen({ navigation }) {
         <View style={s.topActions}>
           {!isPro && (
             <TouchableOpacity onPress={() => navigation.navigate("Pricing")} hitSlop={8}>
-              <LinearGradient colors={[colors.primary, colors.primaryLight]} style={s.proBadge}>
+              <LinearGradient colors={[theme.primary, theme.primaryLight]} style={s.proBadge}>
                 <Text style={s.proBadgeText}>✦ Go Pro</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -218,12 +220,12 @@ export default function DashboardScreen({ navigation }) {
       >
         {/* Hero */}
         <StaggerReveal delay={60} profile="snappy">
-          <LinearGradient colors={["#0d5c57", "#0a4844"]} style={s.heroCard}>
+          <LinearGradient colors={theme.heroGradient} style={s.heroCard}>
             <View style={s.heroContent}>
               <View>
                 <Text style={s.heroGreet}>Hello{userInfo?.full_name ? `, ${userInfo.full_name.split(" ")[0]}` : ""} 👋</Text>
                 <Text style={s.heroTitle}>{activeCount} active subscription{activeCount !== 1 ? "s" : ""}</Text>
-                <Text style={s.heroSub}>{isPro ? "Pro plan · Unlimited tracking" : `Free plan · ${FREE_LIMIT - activeCount} slot${FREE_LIMIT - activeCount !== 1 ? "s" : ""} left`}</Text>
+                <Text style={s.heroSub}>{isPro ? "Pro plan · Unlimited tracking" : activeCount >= FREE_LIMIT ? "Free plan · Limit reached — upgrade for more" : `Free plan · ${FREE_LIMIT - activeCount} free slot left`}</Text>
               </View>
               <View style={s.heroActions}>
                 <TouchableOpacity onPress={() => setShowAnalytics(v => !v)} style={[s.toggleBtn, showAnalytics && s.toggleBtnActive]}>
