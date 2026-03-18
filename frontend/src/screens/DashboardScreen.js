@@ -31,31 +31,35 @@ export default function DashboardScreen({ navigation }) {
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [subsData, analyticsData, meData, actionData] = await Promise.all([
+      // allSettled so a failing edge-function (analytics) never wipes the sub list
+      const [subsRes, analyticsRes, meRes, actionRes] = await Promise.allSettled([
         api.listSubs(),
         api.analytics(),
         api.me(),
         api.actionCenterRisk(30),
       ]);
-      setSubs(Array.isArray(subsData) ? subsData : subsData?.items || []);
-      setAnalytics(analyticsData);
-      setUserInfo(meData);
-      const now = Date.now();
-      const enriched = (Array.isArray(actionData) ? actionData : actionData?.items || []).map((sub) => {
-        const due = new Date(sub.next_billing_date);
-        const due_in_days = Math.max(0, Math.ceil((due.getTime() - now) / (1000 * 60 * 60 * 24)));
-        const reasons = [];
-        if (due_in_days <= 7) reasons.push("due_within_7_days");
-        else if (due_in_days <= 30) reasons.push("due_within_30_days");
-        if (sub.usage_rating && sub.usage_rating <= 2) reasons.push("low_usage");
-        return { ...sub, due_in_days, reasons };
-      });
-      setActionCenterItems(enriched);
-    } catch {
-      setSubs([]);
-      setAnalytics(null);
-      setUserInfo(null);
-      setActionCenterItems([]);
+
+      if (subsRes.status === "fulfilled") {
+        const d = subsRes.value;
+        setSubs(Array.isArray(d) ? d : d?.items || []);
+      }
+      if (analyticsRes.status === "fulfilled") setAnalytics(analyticsRes.value);
+      if (meRes.status === "fulfilled")        setUserInfo(meRes.value);
+
+      if (actionRes.status === "fulfilled") {
+        const d = actionRes.value;
+        const now = Date.now();
+        const enriched = (Array.isArray(d) ? d : d?.items || []).map((sub) => {
+          const due = new Date(sub.next_billing_date);
+          const due_in_days = Math.max(0, Math.ceil((due.getTime() - now) / (1000 * 60 * 60 * 24)));
+          const reasons = [];
+          if (due_in_days <= 7) reasons.push("due_within_7_days");
+          else if (due_in_days <= 30) reasons.push("due_within_30_days");
+          if (sub.usage_rating && sub.usage_rating <= 2) reasons.push("low_usage");
+          return { ...sub, due_in_days, reasons };
+        });
+        setActionCenterItems(enriched);
+      }
     } finally {
       setRefreshing(false);
       setLoading(false);
