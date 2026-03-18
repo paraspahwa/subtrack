@@ -80,6 +80,40 @@ export default function AuthScreen({ navigation, route }) {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!resetEmail.trim() || !resetEmail.includes("@")) {
+      return setResetError("Enter a valid email address.");
+    }
+    setLoading(true);
+    setResetError("");
+    setResetInfo("");
+    try {
+      await api.forgotPassword(resetEmail.trim().toLowerCase());
+      setResetInfo("If an account exists, a reset link/token has been sent.");
+      setResetStep(2);
+    } catch (err) {
+      setResetError(err.message || "Could not send reset email.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetToken.trim()) return setResetError("Paste your reset token.");
+    if (newPassword.length < 6) return setResetError("Password must be at least 6 characters.");
+    setLoading(true);
+    setResetError("");
+    setResetInfo("");
+    try {
+      await api.resetPassword(resetToken.trim(), newPassword);
+      setResetDone(true);
+    } catch (err) {
+      setResetError(err.message || "Failed to reset password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={s.safe}>
       <LinearGradient colors={["#fdf7eb", "#f6f3ea"]} style={s.bg}>
