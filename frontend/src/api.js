@@ -63,8 +63,8 @@ export const api = {
   },
 
   updateMe: async (body) => {
-    const { data: sessionData } = await insforge.auth.getCurrentSession();
-    return handle(insforge.database.from("profiles").update(body).eq("id", sessionData?.session?.user?.id));
+    const sessionData = insforge.auth.getSession();
+    return handle(insforge.database.from("profiles").update(body).eq("id", sessionData?.user?.id));
   },
 
   forgotPassword: (email) => handle(insforge.auth.sendResetPasswordEmail({ email })),
@@ -77,8 +77,8 @@ export const api = {
   listSubs: () => handle(insforge.database.from("subscriptions").select("*").order("next_billing_date", { ascending: true })),
   
   createSub: async (body) => {
-    const { data: sessionData } = await insforge.auth.getCurrentSession();
-    const userId = sessionData?.session?.user?.id;
+    const sessionData = insforge.auth.getSession();
+    const userId = sessionData?.user?.id;
     return handle(insforge.database.from("subscriptions").insert([{ ...body, user_id: userId }]).select().single());
   },
   
@@ -113,14 +113,14 @@ export const api = {
   discoveryMailbox: () => handle(insforge.database.from("mailbox_connections").select("*")),
   
   connectDiscoveryMailbox: async (provider, email) => {
-    const { data: sessionData } = await insforge.auth.getCurrentSession();
-    const userId = sessionData?.session?.user?.id;
+    const sessionData = insforge.auth.getSession();
+    const userId = sessionData?.user?.id;
     return handle(insforge.database.from("mailbox_connections").insert([{ provider, email, user_id: userId }]));
   },
   
   disconnectDiscoveryMailbox: async () => {
-    const { data: sessionData } = await insforge.auth.getCurrentSession();
-    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", sessionData?.session?.user?.id));
+    const sessionData = insforge.auth.getSession();
+    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", sessionData?.user?.id));
   },
 
   discoveryCandidates: (status = "pending") => handle(insforge.database.from("discovery_candidates").select("*").eq("status", status)),
