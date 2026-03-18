@@ -115,14 +115,16 @@ export const api = {
   discoveryMailbox: () => handle(insforge.database.from("mailbox_connections").select("*")),
   
   connectDiscoveryMailbox: async (provider, email) => {
-    const sessionData = insforge.auth.getSession();
-    const userId = sessionData?.user?.id;
+    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
+    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
+    const userId = sessionData.session.user.id;
     return handle(insforge.database.from("mailbox_connections").insert([{ provider, email, user_id: userId }]));
   },
   
   disconnectDiscoveryMailbox: async () => {
-    const sessionData = insforge.auth.getSession();
-    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", sessionData?.user?.id));
+    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
+    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
+    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", sessionData.session.user.id));
   },
 
   discoveryCandidates: (status = "pending") => handle(insforge.database.from("discovery_candidates").select("*").eq("status", status)),
