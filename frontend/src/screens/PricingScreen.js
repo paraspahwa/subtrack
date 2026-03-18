@@ -24,6 +24,7 @@ const PRO_FEATURES = [
   "Priority renewal reminders",
   "Waste detection and savings view",
   "Most expensive service tracking",
+  "Shared subscription split-cost",
   "Priority support",
 ];
 

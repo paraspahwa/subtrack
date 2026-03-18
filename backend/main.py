@@ -72,7 +72,8 @@ class SubscriptionCreate(BaseModel):
     color: Optional[str] = None
     is_active: bool = True
     usage_rating: Optional[int] = None  # 1 (never) – 5 (daily)
-    cancel_url: Optional[str] = None
+    cancel_url: Optional[int] = None
+    num_members: int = 1
 
 
 class SubscriptionUpdate(BaseModel):
@@ -87,6 +88,7 @@ class SubscriptionUpdate(BaseModel):
     is_active: Optional[bool] = None
     usage_rating: Optional[int] = None
     cancel_url: Optional[str] = None
+    num_members: Optional[int] = None
 
 
 class OrderRequest(BaseModel):
@@ -484,6 +486,7 @@ def create_subscription(
         is_active=req.is_active,
         usage_rating=usage_rating,
         cancel_url=cancel_url,
+        num_members=max(1, req.num_members),
     )
     db.add(sub)
     db.commit()
@@ -879,6 +882,8 @@ def update_subscription(
         sub.usage_rating = _normalize_usage_rating(req.usage_rating)
     if "cancel_url" in fields_set:
         sub.cancel_url = _normalize_cancel_url(req.cancel_url)
+    if req.num_members is not None:
+        sub.num_members = max(1, req.num_members)
     sub.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(sub)
@@ -905,18 +910,19 @@ def get_analytics(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    home_currency = current_user.home_currency or "USD"
     subs = db.query(Subscription).filter(
         Subscription.user_id == current_user.id,
         Subscription.is_active == True
     ).all()
 
-    monthly_total = sum(_monthly_cost(s) for s in subs)
+    monthly_total = sum(_converted_monthly_cost(s, home_currency) for s in subs)
     yearly_total = monthly_total * 12
 
     # By category
     by_category = {}
     for s in subs:
-        cost = _monthly_cost(s)
+        cost = _converted_monthly_cost(s, home_currency)
         by_category[s.category] = by_category.get(s.category, 0) + cost
 
     # Upcoming renewals (next 30 days)
@@ -933,11 +939,12 @@ def get_analytics(
 
     # Waste detection: low-rated (1-2 stars) active subscriptions
     waste_subs = [s for s in subs if s.usage_rating and s.usage_rating <= 2]
-    waste_monthly = sum(_monthly_cost(s) for s in waste_subs)
+    waste_monthly = sum(_converted_monthly_cost(s, home_currency) for s in waste_subs)
 
     return {
         "monthly_total": round(monthly_total, 2),
         "yearly_total": round(yearly_total, 2),
+        "home_currency": home_currency,
         "active_count": len(subs),
         "by_category": {k: round(v, 2) for k, v in by_category.items()},
         "upcoming_renewals": upcoming[:5],
@@ -1241,11 +1248,35 @@ def _get_candidate_or_404(candidate_id: int, user_id: int, db: Session) -> Disco
 
 
 def _monthly_cost(sub: Subscription) -> float:
+    base = sub.amount
     if sub.billing_cycle == "yearly":
-        return sub.amount / 12
-    if sub.billing_cycle == "weekly":
-        return sub.amount * 4.33
-    return sub.amount  # monthly
+        base = sub.amount / 12
+    elif sub.billing_cycle == "weekly":
+        base = sub.amount * 4.33
+    
+    # Apply shared subscription logic
+    return base / max(1, sub.num_members or 1)
+
+def _get_exchange_rate(from_curr: str, to_curr: str) -> float:
+    # V1: Mocked rates for major pairs. In production, this would call an external API.
+    rates = {
+        ("USD", "INR"): 83.0,
+        ("INR", "USD"): 1/83.0,
+        ("EUR", "USD"): 1.08,
+        ("USD", "EUR"): 1/1.08,
+        ("GBP", "USD"): 1.27,
+        ("USD", "GBP"): 1/1.27,
+    }
+    from_curr = from_curr.upper()
+    to_curr = to_curr.upper()
+    if from_curr == to_curr:
+        return 1.0
+    return rates.get((from_curr, to_curr), 1.0)
+
+def _converted_monthly_cost(sub: Subscription, target_currency: str) -> float:
+    cost = _monthly_cost(sub)
+    rate = _get_exchange_rate(sub.currency or "USD", target_currency)
+    return cost * rate
 
 
 def _compute_amount_change_pct(previous_amount: Optional[float], new_amount: float) -> Optional[float]:
@@ -1314,6 +1345,7 @@ def _sub_dict(sub: Subscription) -> dict:
         "color": sub.color,
         "usage_rating": sub.usage_rating,
         "cancel_url": sub.cancel_url,
+        "num_members": sub.num_members,
         "cancellation_outcome": sub.cancellation_outcome,
         "cancellation_outcome_at": sub.cancellation_outcome_at.isoformat() if sub.cancellation_outcome_at else None,
         "monthly_cost": round(_monthly_cost(sub), 2),

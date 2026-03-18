@@ -75,6 +75,7 @@ class User(Base):
 
     # App plan
     plan = Column(String, default="free")  # 'free', 'pro'
+    home_currency = Column(String, default="USD")
     subscription_active = Column(Boolean, default=True)
     subscription_end_date = Column(DateTime, nullable=True)
 
@@ -138,6 +139,9 @@ class Subscription(Base):
 
     # Logo / color for display
     color = Column(String, nullable=True)  # hex color
+
+    # For shared subscriptions
+    num_members = Column(Integer, default=1)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -230,9 +234,11 @@ def init_db():
         run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR")
         run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP")
         run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_used_at TIMESTAMP")
+        run_optional_migration("ALTER TABLE users ADD COLUMN IF NOT EXISTS home_currency VARCHAR DEFAULT 'USD'")
         run_optional_migration("CREATE INDEX IF NOT EXISTS ix_users_password_reset_token ON users (password_reset_token)")
         run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome VARCHAR")
         run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancellation_outcome_at TIMESTAMP")
+        run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS num_members INTEGER DEFAULT 1")
         run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION")
         run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_change_pct DOUBLE PRECISION")
         run_optional_migration("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS amount_changed_at TIMESTAMP")

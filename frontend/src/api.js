@@ -26,6 +26,7 @@ export const api = {
   register: (body) => request("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login:    (body) => request("/api/auth/login",    { method: "POST", body: JSON.stringify(body) }),
   me:       ()     => request("/api/auth/me"),
+  updateMe: (body)   => request("/api/auth/me",    { method: "PUT", body: JSON.stringify(body) }),
   forgotPassword: (email)        => request("/api/auth/forgot-password",  { method: "POST", body: JSON.stringify({ email }) }),
   resetPassword:  (token, pwd)   => request("/api/auth/reset-password",   { method: "POST", body: JSON.stringify({ token, new_password: pwd }) }),
   deleteAccount:  ()             => request("/api/auth/account",           { method: "DELETE" }),

@@ -15,6 +15,7 @@ export default function AnalyticsPanel({ analytics }) {
   const {
     monthly_total,
     yearly_total,
+    home_currency = "USD",
     active_count,
     by_category,
     upcoming_renewals,
@@ -24,6 +25,14 @@ export default function AnalyticsPanel({ analytics }) {
     potential_yearly_savings = 0,
   } = analytics;
 
+  const fmt = (val, curr = home_currency) => {
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: curr, maximumFractionDigits: val % 1 === 0 ? 0 : 2 }).format(val);
+    } catch {
+      return `${curr} ${val.toFixed(2)}`;
+    }
+  };
+
   const catEntries = Object.entries(by_category).sort((a, b) => b[1] - a[1]);
   const maxCat = catEntries[0]?.[1] || 1;
 
@@ -31,8 +40,8 @@ export default function AnalyticsPanel({ analytics }) {
     <View style={s.wrap}>
       <StaggerReveal style={s.kpiGrid} delay={40} profile="snappy">
         {[
-          { label: "Monthly", value: `$${monthly_total.toFixed(2)}` },
-          { label: "Yearly", value: `$${yearly_total.toFixed(0)}` },
+          { label: "Monthly", value: fmt(monthly_total) },
+          { label: "Yearly", value: fmt(yearly_total) },
           { label: "Active", value: String(active_count) },
           { label: "Due Soon", value: String(upcoming_renewals.length) },
         ].map((kpi) => (
@@ -45,12 +54,12 @@ export default function AnalyticsPanel({ analytics }) {
 
       {catEntries.length > 0 && (
         <StaggerReveal style={s.block} delay={80} profile="smooth">
-          <Text style={s.blockTitle}>Spend by category</Text>
+          <Text style={s.blockTitle}>Spend by category ({home_currency})</Text>
           {catEntries.map(([cat, val]) => (
             <View key={cat} style={s.barRow}>
               <View style={s.barHeader}>
                 <Text style={s.barLabel}>{cat}</Text>
-                <Text style={s.barAmount}>${val.toFixed(2)}/mo</Text>
+                <Text style={s.barAmount}>{fmt(val)}/mo</Text>
               </View>
               <View style={s.barTrack}>
                 <View style={[s.barFill, { width: `${(val / maxCat) * 100}%`, backgroundColor: categoryColors[cat] || colors.primary }]} />
@@ -68,7 +77,7 @@ export default function AnalyticsPanel({ analytics }) {
             return (
               <View key={sub.id} style={s.row}>
                 <Text style={s.rowName} numberOfLines={1}>{sub.name}</Text>
-                <Text style={s.rowMeta}>${sub.amount}</Text>
+                <Text style={s.rowMeta}>{fmt(sub.amount, sub.currency)}</Text>
                 <Text style={[s.rowMeta, d <= 3 && { color: colors.warning }]}>{d === 0 ? "Today" : `${d}d`}</Text>
               </View>
             );
@@ -78,12 +87,12 @@ export default function AnalyticsPanel({ analytics }) {
 
       {most_expensive.length > 0 && (
         <StaggerReveal style={s.block} delay={140} profile="smooth">
-          <Text style={s.blockTitle}>Highest monthly costs</Text>
+          <Text style={s.blockTitle}>Highest monthly costs ({home_currency})</Text>
           {most_expensive.map((sub, i) => (
             <View key={sub.id} style={s.row}>
               <Text style={s.rank}>{i + 1}</Text>
               <Text style={s.rowName} numberOfLines={1}>{sub.name}</Text>
-              <Text style={s.rowMeta}>${sub.monthly_cost.toFixed(2)}/mo</Text>
+              <Text style={s.rowMeta}>{fmt(sub.monthly_cost)}/mo</Text>
             </View>
           ))}
         </StaggerReveal>
@@ -93,17 +102,17 @@ export default function AnalyticsPanel({ analytics }) {
         <StaggerReveal style={[s.block, s.blockWarn]} delay={170} profile="smooth">
           <View style={s.savingsHead}>
             <Text style={[s.blockTitle, { marginBottom: 0 }]}>Savings opportunities</Text>
-            <Text style={s.savingsPill}>Save ${potential_yearly_savings.toFixed(0)}/yr</Text>
+            <Text style={s.savingsPill}>Save {fmt(potential_yearly_savings)}/yr</Text>
           </View>
 
           <View style={s.savingsTiles}>
             <View style={s.tile}>
               <Text style={s.tileLabel}>Wasted monthly</Text>
-              <Text style={[s.tileValue, { color: colors.error }]}>${waste_monthly.toFixed(2)}</Text>
+              <Text style={[s.tileValue, { color: colors.error }]}>{fmt(waste_monthly)}</Text>
             </View>
             <View style={s.tile}>
               <Text style={s.tileLabel}>Potential yearly</Text>
-              <Text style={[s.tileValue, { color: colors.success }]}>${potential_yearly_savings.toFixed(2)}</Text>
+              <Text style={[s.tileValue, { color: colors.success }]}>{fmt(potential_yearly_savings)}</Text>
             </View>
           </View>
 
@@ -112,7 +121,7 @@ export default function AnalyticsPanel({ analytics }) {
               <Text style={s.rowName} numberOfLines={1}>{sub.name}</Text>
               <Text style={s.rowMeta}>{RATING_LABELS[sub.usage_rating || 0]}</Text>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={s.rowMeta}>${sub.monthly_cost.toFixed(2)}/mo</Text>
+                <Text style={s.rowMeta}>{fmt(sub.monthly_cost)}/mo</Text>
                 {sub.cancel_url ? (
                   <TouchableOpacity onPress={() => Linking.openURL(sub.cancel_url)}>
                     <Text style={s.cancel}>Open cancel page</Text>

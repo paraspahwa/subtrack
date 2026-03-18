@@ -58,6 +58,7 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
     is_active:         sub?.is_active !== undefined ? sub.is_active : true,
     usage_rating:      sub?.usage_rating      || null,
     cancel_url:        sub?.cancel_url        || "",
+    num_members:       sub?.num_members?.toString() || "1",
   });
 
   const [form, setForm] = useState(blankForm);
@@ -93,6 +94,7 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
       is_active:         true,
       usage_rating:      null,
       cancel_url:        t.cancel_url || "",
+      num_members:       "1",
     });
     setShowTemplates(false);
     setError("");
@@ -108,6 +110,7 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
       const payload = {
         ...form,
         amount: parseFloat(form.amount),
+        num_members: parseInt(form.num_members) || 1,
         cancel_url: form.cancel_url || null,
       };
       const data = isEdit ? await api.updateSub(sub.id, payload) : await api.createSub(payload);
@@ -181,6 +184,12 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
                 ))}
               </View>
             </View>
+          </View>
+
+          <View style={s.field}>
+            <Text style={s.label}>Number of Members (Shared subscription)</Text>
+            <TextInput style={s.input} placeholder="1" placeholderTextColor={colors.text4} value={form.num_members} onChangeText={set("num_members")} keyboardType="numeric" />
+            <Text style={s.sublabel}>The cost will be split equally among all members.</Text>
           </View>
 
           <View style={s.field}>

@@ -48,7 +48,13 @@ export default function SubCard({ sub, onEdit, onDelete }) {
       <View style={s.footer}>
         <View>
           <Text style={s.amount}>{fmtCurrency(sub.amount, sub.currency)}</Text>
-          <Text style={s.cycle}>{sub.billing_cycle} • {fmtCurrency(sub.monthly_cost, sub.currency)}/mo</Text>
+          <Text style={s.cycle}>
+            {sub.billing_cycle} • {fmtCurrency(sub.monthly_cost, sub.currency)}/mo
+            {sub.num_members > 1 ? ` • ${sub.num_members} members` : ""}
+          </Text>
+          {sub.num_members > 1 && (
+            <Text style={s.shareText}>Your share: {fmtCurrency(sub.monthly_cost, sub.currency)}/mo</Text>
+          )}
         </View>
 
         {days !== null && (
@@ -120,4 +126,5 @@ const s = StyleSheet.create({
 
   pausedBadge: { marginTop: 10, backgroundColor: "rgba(148,163,184,0.20)", borderRadius: 8, paddingVertical: 6, alignItems: "center" },
   pausedText: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12 },
+  shareText: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 11, marginTop: 2 },
 });
