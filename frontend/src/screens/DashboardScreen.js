@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, CATEGORIES } from "../theme";
-import { api } from "../api";
+import { api, insforge } from "../api";
 import SubCard from "../components/SubCard";
 import SubModal from "../components/SubModal";
 import AnalyticsPanel from "../components/AnalyticsPanel";
@@ -44,7 +44,6 @@ export default function DashboardScreen({ navigation }) {
       setSubs(subsData);
       setAnalytics(analyticsData);
       setUserInfo(meData);
-      await AsyncStorage.setItem("st_user", JSON.stringify({ id: meData.user_id, email: meData.email, name: meData.full_name, plan: meData.plan }));
 
       const reminderPref = await AsyncStorage.getItem("st_notifications");
       const remindersOn = reminderPref === "true";
@@ -63,7 +62,7 @@ export default function DashboardScreen({ navigation }) {
       }
     } catch (e) {
       if (e.message?.includes("401")) {
-        await AsyncStorage.multiRemove(["st_token", "st_user"]);
+        await insforge.auth.signOut();
         navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
       }
     } finally {
@@ -93,7 +92,7 @@ export default function DashboardScreen({ navigation }) {
   }, [fetchPriceAlerts]);
 
   const handleLogout = async () => {
-    await AsyncStorage.multiRemove(["st_token", "st_user"]);
+    await insforge.auth.signOut();
     navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
   };
 

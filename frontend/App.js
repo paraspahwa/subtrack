@@ -3,7 +3,6 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
 import { Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black } from "@expo-google-fonts/poppins";
 
@@ -13,6 +12,7 @@ import DashboardScreen from "./src/screens/DashboardScreen";
 import PricingScreen  from "./src/screens/PricingScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import { colors }     from "./src/theme";
+import { insforge }   from "./src/api";
 
 const Stack = createNativeStackNavigator();
 
@@ -26,8 +26,12 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const token = await AsyncStorage.getItem("st_token");
-      setInitialRoute(token ? "Dashboard" : "Landing");
+      try {
+        const { data } = await insforge.auth.getCurrentUser();
+        setInitialRoute(data?.user ? "Dashboard" : "Landing");
+      } catch {
+        setInitialRoute("Landing");
+      }
     })();
   }, []);
 

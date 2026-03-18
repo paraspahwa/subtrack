@@ -132,19 +132,13 @@ export default function PricingScreen({ navigation }) {
     if (!isVerificationSuccess(verifyResult)) {
       throw new Error("Payment was initiated but verification is pending. Please refresh in a minute.");
     }
-
-    const me = await api.me();
-    await AsyncStorage.setItem("st_user", JSON.stringify({
-      id: me.user_id,
-      email: me.email,
-      name: me.full_name,
-      plan: me.plan,
-    }));
+    // InsForge profile is updated by the razorpay-verify edge function.
+    // No local cache write needed.
   };
 
   const handleUpgrade = async () => {
-    const token = await AsyncStorage.getItem("st_token");
-    if (!token) {
+    const { data } = await insforge.auth.getCurrentUser();
+    if (!data?.user) {
       navigation.navigate("Auth", { mode: "signup" });
       return;
     }

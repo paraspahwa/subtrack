@@ -46,12 +46,9 @@ export default function AuthScreen({ navigation, route }) {
     }
   };
 
-  const saveSession = async (data) => {
-    await AsyncStorage.setItem("st_token", data.access_token);
-    await AsyncStorage.setItem(
-      "st_user",
-      JSON.stringify({ id: data.user_id, email: data.email, name: data.full_name, plan: data.plan })
-    );
+  const saveSession = async (_data) => {
+    // InsForge manages the session internally via the SDK.
+    // Just navigate to the Dashboard.
     navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
   };
 

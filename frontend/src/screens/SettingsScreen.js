@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
-import { api } from "../api";
+import { api, insforge } from "../api";
 import StaggerReveal from "../components/StaggerReveal";
 import BrandShapes from "../components/BrandShapes";
 
@@ -25,9 +25,10 @@ export default function SettingsScreen({ navigation }) {
   const [candidateActionId, setCandidateActionId] = useState(null);
 
   useEffect(() => {
-    AsyncStorage.getItem("st_user").then((raw) => {
-      if (raw) setUser(JSON.parse(raw));
-    });
+    // Load user from InsForge auth
+    api.me().then((me) => {
+      if (me) setUser({ email: me.email, name: me.full_name || me.name, plan: me.plan });
+    }).catch(() => {});
     AsyncStorage.getItem("st_notifications").then((val) => {
       setNotificationsEnabled(val === "true");
     });
@@ -164,7 +165,7 @@ export default function SettingsScreen({ navigation }) {
         text: "Log out",
         style: "destructive",
         onPress: async () => {
-          await AsyncStorage.multiRemove(["st_token", "st_user"]);
+          await insforge.auth.signOut();
           navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
         },
       },
@@ -180,7 +181,6 @@ export default function SettingsScreen({ navigation }) {
         onPress: async () => {
           try {
             await api.deleteAccount();
-            await AsyncStorage.multiRemove(["st_token", "st_user"]);
             navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
           } catch (err) {
             Alert.alert("Error", err.message || "Failed to delete account.");
@@ -191,10 +191,7 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleExportCSV = async () => {
-    const token = await AsyncStorage.getItem("st_token");
-    if (!token) return;
-    const url = api.exportCsvUrl();
-    Linking.openURL(`${url}?token=${token}`).catch(() => Alert.alert("Error", "Could not open export URL."));
+    Alert.alert("Export", "CSV export is available in the Pro plan. Contact support for data exports.");
   };
 
   const toggleNotifications = async (val) => {
