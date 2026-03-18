@@ -24,52 +24,35 @@ export default function AuthScreen({ navigation, route }) {
   const [newPassword, setNewPassword] = useState("");
   const [resetDone, setResetDone] = useState(false);
 
+  const [verifyMode, setVerifyMode] = useState(false);
+  const [otp, setOtp] = useState("");
+
   const set = (key) => (val) => {
     setForm((p) => ({ ...p, [key]: val }));
     setError("");
   };
 
-  const handleForgotPassword = async () => {
-    if (!resetEmail.includes("@")) return setResetError("Enter a valid email.");
+  const handleVerify = async () => {
+    if (otp.length < 6) return setError("Enter the 6-digit code.");
     setLoading(true);
-    setResetError("");
-    setResetInfo("");
+    setError("");
     try {
-      const data = await api.forgotPassword(resetEmail.trim().toLowerCase());
-      if (data.reset_token) setResetToken(data.reset_token);
-      setResetInfo("If an account exists for this email, reset instructions have been sent.");
-      setResetStep(2);
+      const data = await api.verifyEmail(form.email.trim().toLowerCase(), otp.trim());
+      await saveSession(data);
     } catch (err) {
-      if (/network|failed|503|500/i.test(err?.message || "")) {
-        setResetError("We could not process your request right now. Please try again shortly.");
-      } else {
-        setResetInfo("If an account exists for this email, reset instructions have been sent.");
-        setResetStep(2);
-      }
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResetPassword = async () => {
-    if (newPassword.length < 6) return setResetError("Password must be at least 6 characters.");
-    if (!resetToken.trim()) return setResetError("Enter the reset token.");
-    setLoading(true);
-    setResetError("");
-    setResetInfo("");
-    try {
-      await api.resetPassword(resetToken.trim(), newPassword);
-      setResetInfo("Your password has been updated successfully.");
-      setResetDone(true);
-    } catch (err) {
-      if (/network|failed|503|500/i.test(err?.message || "")) {
-        setResetError("We could not reset your password right now. Please try again shortly.");
-      } else {
-        setResetError("We could not reset your password with those details. Check the token and try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
+  const saveSession = async (data) => {
+    await AsyncStorage.setItem("st_token", data.access_token);
+    await AsyncStorage.setItem(
+      "st_user",
+      JSON.stringify({ id: data.user_id, email: data.email, name: data.full_name, plan: data.plan })
+    );
+    navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
   };
 
   const handleSubmit = async () => {
@@ -88,13 +71,11 @@ export default function AuthScreen({ navigation, route }) {
           ? await api.login({ email: form.email, password: form.password })
           : await api.register({ email: form.email, password: form.password, full_name: form.fullName });
 
-      await AsyncStorage.setItem("st_token", data.access_token);
-      await AsyncStorage.setItem(
-        "st_user",
-        JSON.stringify({ id: data.user_id, email: data.email, name: data.full_name, plan: data.plan })
-      );
-
-      navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
+      if (data.requireEmailVerification) {
+        setVerifyMode(true);
+      } else {
+        await saveSession(data);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -119,117 +100,163 @@ export default function AuthScreen({ navigation, route }) {
                 <Text style={s.logoText}>SubTrack</Text>
               </View>
 
-              <View style={s.tabs}>
-                {["login", "signup"].map((m) => (
-                  <TouchableOpacity key={m} style={s.tabBtn} onPress={() => { setMode(m); setError(""); }} hitSlop={8}>
-                    <LinearGradient
-                      colors={mode === m ? [colors.primary, "#1f7a73"] : ["transparent", "transparent"]}
-                      style={[s.tabSurface, mode !== m && s.tabInactive]}
-                    >
-                      <Text style={[s.tabText, mode === m ? s.tabTextActive : null]}>{m === "login" ? "Log In" : "Sign Up"}</Text>
+              {verifyMode ? (
+                <>
+                  <Text style={s.title}>Verify your email</Text>
+                  <Text style={s.subtitle}>We've sent a 6-digit code to {form.email}. Enter it below to continue.</Text>
+
+                  {error ? (
+                    <View style={s.errorBox}>
+                      <Text style={s.errorText}>{error}</Text>
+                    </View>
+                  ) : null}
+
+                  <View style={s.field}>
+                    <Text style={s.label}>Verification Code</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="123456"
+                      placeholderTextColor={colors.text4}
+                      value={otp}
+                      onChangeText={(v) => { setOtp(v); setError(""); }}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                    />
+                  </View>
+
+                  {loading ? (
+                    <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.submitBtnLoading}>
+                      <View style={s.submitInner}><ActivityIndicator color="#fff" /></View>
                     </LinearGradient>
+                  ) : (
+                    <InteractiveButton label="Verify & Continue" onPress={handleVerify} style={s.submitBtn} />
+                  )}
+
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setVerifyMode(false);
+                      setError("");
+                    }} 
+                    style={[s.switchRow, { marginTop: 20 }]}
+                  >
+                    <Text style={s.switchLink}>Back to Sign Up</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={s.title}>{mode === "login" ? "Welcome back" : "Create your account"}</Text>
-              <Text style={s.subtitle}>{mode === "login" ? "Access your dashboard and renewals." : "Start tracking subscriptions in under one minute."}</Text>
-
-              {error ? (
-                <View style={s.errorBox}>
-                  <Text style={s.errorText}>{error}</Text>
-                </View>
-              ) : null}
-
-              {mode === "signup" && (
-                <View style={s.field}>
-                  <Text style={s.label}>Full Name</Text>
-                  <TextInput
-                    style={s.input}
-                    placeholder="Your name"
-                    placeholderTextColor={colors.text4}
-                    value={form.fullName}
-                    onChangeText={set("fullName")}
-                    autoCapitalize="words"
-                  />
-                </View>
-              )}
-
-              <View style={s.field}>
-                <Text style={s.label}>Email</Text>
-                <TextInput
-                  style={s.input}
-                  placeholder="you@example.com"
-                  placeholderTextColor={colors.text4}
-                  value={form.email}
-                  onChangeText={set("email")}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                />
-              </View>
-
-              <View style={s.field}>
-                <Text style={s.label}>Password</Text>
-                <View style={s.passWrap}>
-                  <TextInput
-                    style={[s.input, { flex: 1, paddingRight: 56 }]}
-                    placeholder={mode === "login" ? "Your password" : "At least 6 characters"}
-                    placeholderTextColor={colors.text4}
-                    value={form.password}
-                    onChangeText={set("password")}
-                    secureTextEntry={!showPass}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPass((p) => !p)} hitSlop={8}>
-                    <Text style={s.eyeText}>{showPass ? "Hide" : "Show"}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {mode === "login" && (
-                <TouchableOpacity onPress={() => {
-                  setResetMode(true);
-                  setResetStep(1);
-                  setResetDone(false);
-                  setResetToken("");
-                  setNewPassword("");
-                  setResetError("");
-                  setResetInfo("");
-                }} style={s.forgotWrap}>
-                  <Text style={s.forgotText}>Forgot password?</Text>
-                </TouchableOpacity>
-              )}
-
-              {mode === "signup" && (
-                <View style={s.field}>
-                  <Text style={s.label}>Confirm Password</Text>
-                  <TextInput
-                    style={s.input}
-                    placeholder="Repeat password"
-                    placeholderTextColor={colors.text4}
-                    value={form.confirmPassword}
-                    onChangeText={set("confirmPassword")}
-                    secureTextEntry={!showPass}
-                    autoCapitalize="none"
-                  />
-                </View>
-              )}
-
-              {loading ? (
-                <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.submitBtnLoading}>
-                  <View style={s.submitInner}><ActivityIndicator color="#fff" /></View>
-                </LinearGradient>
+                </>
               ) : (
-                <InteractiveButton label={mode === "login" ? "Continue" : "Create Account"} onPress={handleSubmit} style={s.submitBtn} />
-              )}
+                <>
+                  <View style={s.tabs}>
+                    {["login", "signup"].map((m) => (
+                      <TouchableOpacity key={m} style={s.tabBtn} onPress={() => { setMode(m); setError(""); }} hitSlop={8}>
+                        <LinearGradient
+                          colors={mode === m ? [colors.primary, "#1f7a73"] : ["transparent", "transparent"]}
+                          style={[s.tabSurface, mode !== m && s.tabInactive]}
+                        >
+                          <Text style={[s.tabText, mode === m ? s.tabTextActive : null]}>{m === "login" ? "Log In" : "Sign Up"}</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-              <View style={s.switchRow}>
-                <Text style={s.switchText}>{mode === "login" ? "No account yet?" : "Already have an account?"}</Text>
-                <TouchableOpacity onPress={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} hitSlop={8}>
-                  <Text style={s.switchLink}>{mode === "login" ? "Sign up" : "Log in"}</Text>
-                </TouchableOpacity>
-              </View>
+                  <Text style={s.title}>{mode === "login" ? "Welcome back" : "Create your account"}</Text>
+                  <Text style={s.subtitle}>{mode === "login" ? "Access your dashboard and renewals." : "Start tracking subscriptions in under one minute."}</Text>
+
+                  {error ? (
+                    <View style={s.errorBox}>
+                      <Text style={s.errorText}>{error}</Text>
+                    </View>
+                  ) : null}
+
+                  {mode === "signup" && (
+                    <View style={s.field}>
+                      <Text style={s.label}>Full Name</Text>
+                      <TextInput
+                        style={s.input}
+                        placeholder="Your name"
+                        placeholderTextColor={colors.text4}
+                        value={form.fullName}
+                        onChangeText={set("fullName")}
+                        autoCapitalize="words"
+                      />
+                    </View>
+                  )}
+
+                  <View style={s.field}>
+                    <Text style={s.label}>Email</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="you@example.com"
+                      placeholderTextColor={colors.text4}
+                      value={form.email}
+                      onChangeText={set("email")}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      autoComplete="email"
+                    />
+                  </View>
+
+                  <View style={s.field}>
+                    <Text style={s.label}>Password</Text>
+                    <View style={s.passWrap}>
+                      <TextInput
+                        style={[s.input, { flex: 1, paddingRight: 56 }]}
+                        placeholder={mode === "login" ? "Your password" : "At least 6 characters"}
+                        placeholderTextColor={colors.text4}
+                        value={form.password}
+                        onChangeText={set("password")}
+                        secureTextEntry={!showPass}
+                        autoCapitalize="none"
+                      />
+                      <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPass((p) => !p)} hitSlop={8}>
+                        <Text style={s.eyeText}>{showPass ? "Hide" : "Show"}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {mode === "login" && (
+                    <TouchableOpacity onPress={() => {
+                      setResetMode(true);
+                      setResetStep(1);
+                      setResetDone(false);
+                      setResetToken("");
+                      setNewPassword("");
+                      setResetError("");
+                      setResetInfo("");
+                    }} style={s.forgotWrap}>
+                      <Text style={s.forgotText}>Forgot password?</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {mode === "signup" && (
+                    <View style={s.field}>
+                      <Text style={s.label}>Confirm Password</Text>
+                      <TextInput
+                        style={s.input}
+                        placeholder="Repeat password"
+                        placeholderTextColor={colors.text4}
+                        value={form.confirmPassword}
+                        onChangeText={set("confirmPassword")}
+                        secureTextEntry={!showPass}
+                        autoCapitalize="none"
+                      />
+                    </View>
+                  )}
+
+                  {loading ? (
+                    <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.submitBtnLoading}>
+                      <View style={s.submitInner}><ActivityIndicator color="#fff" /></View>
+                    </LinearGradient>
+                  ) : (
+                    <InteractiveButton label={mode === "login" ? "Continue" : "Create Account"} onPress={handleSubmit} style={s.submitBtn} />
+                  )}
+
+                  <View style={s.switchRow}>
+                    <Text style={s.switchText}>{mode === "login" ? "No account yet?" : "Already have an account?"}</Text>
+                    <TouchableOpacity onPress={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} hitSlop={8}>
+                      <Text style={s.switchLink}>{mode === "login" ? "Sign up" : "Log in"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </StaggerReveal>
           </ScrollView>
         </KeyboardAvoidingView>

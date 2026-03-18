@@ -4,150 +4,104 @@
 
 ---
 
-## Tech Stack
+## 🚀 One-Click Setup (GitHub Codespaces)
 
-| Layer          | Technology                          |
-|----------------|-------------------------------------|
-| Mobile App     | React Native + Expo SDK 51          |
-| Navigation     | React Navigation (Native Stack)     |
-| Backend        | FastAPI (Python 3.11) + Uvicorn     |
-| ORM            | SQLAlchemy + PostgreSQL 15          |
-| Auth           | JWT (PyJWT) + bcrypt                |
-| Payments       | Razorpay (Pro plan upgrade)         |
-| Web (Docker)   | Expo web export → Nginx             |
-| Infra          | Docker + Docker Compose             |
+1. Click **Code** -> **Codespaces** -> **Create codespace on main**.
+2. Once the container starts, the backend and frontend dependencies will auto-install (if configured) or run:
+   ```bash
+   # Terminal 1: Backend
+   cd backend && pip install -r requirements.txt && uvicorn main:app --reload
+   # Terminal 2: Frontend
+   cd frontend && npm install && npm start
+   ```
+3. Use the **Ports** tab to open the frontend (default `19006` for web).
 
 ---
 
-## Running the Mobile App
+## 💻 Local Machine Setup
 
 ### Prerequisites
-- Node.js 18+
-- Expo CLI: `npm install -g expo-cli`
-- For iOS: Xcode (macOS only)
-- For Android: Android Studio + emulator, or a physical device with **Expo Go** app
+- **Node.js 18+** & **npm**
+- **Python 3.11+**
+- **Docker** (Optional, but recommended for Database)
 
-### Quick Start (Mobile)
+### 1. Backend & Database
+```bash
+cd backend
+cp .env.example .env  # Configure DATABASE_URL and SECRET_KEY
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+*Note: If using Docker, just run `docker compose up` from the root.*
 
+### 2. Frontend (Mobile & Web)
 ```bash
 cd frontend
 npm install --legacy-peer-deps
-npm start          # Opens Expo dev menu
-```
-
-Then:
-- **Android emulator** — press `a` in the terminal
-- **iOS simulator** — press `i` in the terminal (macOS only)
-- **Physical device** — scan the QR code with the **Expo Go** app (iOS/Android)
-
-### Configure API URL
-
-Edit `frontend/src/config.js`:
-
-```js
-// iOS Simulator
-const API_URL = "http://localhost:8000";
-
-// Android Emulator
-const API_URL = "http://10.0.2.2:8000";
-
-// Physical device (replace with your machine's local IP)
-const API_URL = "http://192.168.1.x:8000";
+npm start
 ```
 
 ---
 
-## Running the Backend
+## 📱 Mobile Development (Emulators & Devices)
 
-### Option A — Docker (Recommended)
+### Android Emulator (Android Studio)
+1. Open **Android Studio** -> **Device Manager** -> Start your Pixel/Nexus emulator.
+2. In the terminal where `npm start` is running, press `a`.
+3. Set `API_URL = "http://10.0.2.2:8000"` in `frontend/src/config.js`.
 
-```bash
-# Copy and configure env
-cp .env.example .env
-# Edit .env — set SECRET_KEY at minimum
+### iOS Simulator (Xcode - macOS Only)
+1. Install **Xcode**.
+2. In the terminal where `npm start` is running, press `i`.
+3. Set `API_URL = "http://localhost:8000"` in `frontend/src/config.js`.
 
-# Start backend + database
-docker compose up --build
-
-# Backend API: http://localhost:8000
-# API docs:    http://localhost:8000/docs
-# Web app:     http://localhost:3000  (Expo web build)
-```
-
-### Option B — Local
-
-```bash
-cd backend
-pip install -r requirements.txt
-# Set DATABASE_URL env var
-uvicorn main:app --reload --port 8000
-```
+### Physical Device (Expo Go)
+1. Install **Expo Go** from App Store/Play Store.
+2. Scan the QR code shown in your terminal.
+3. Use your computer's local IP (e.g., `192.168.1.x`) for `API_URL`.
 
 ---
 
-## Building for Production (APK / IPA)
+## ☁️ AWS Server Deployment (EC2/Production)
 
-Uses [EAS Build](https://docs.expo.dev/build/introduction/) from Expo:
-
-```bash
-npm install -g eas-cli
-eas login
-eas build --platform android    # → .apk / .aab
-eas build --platform ios        # → .ipa (requires Apple Developer account)
-```
-
----
-
-## Features
-
-### Free Plan (forever free)
-- Track up to 10 subscriptions
-- Monthly & yearly spend totals
-- Category organization
-- Renewal date tracking
-- Basic analytics
-
-### Pro Plan ($9/month)
-- Unlimited subscriptions
-- Full analytics dashboard
-- Renewal alerts (30-day view)
-- Spend by category charts
-- Most expensive breakdown
-- Priority support
+### Recommended: Docker Compose
+1. **Provision EC2**: Use Ubuntu 22.04 LTS.
+2. **Install Docker**:
+   ```bash
+   sudo apt update && sudo apt install docker.io docker-compose -y
+   ```
+3. **Deploy**:
+   ```bash
+   git clone https://github.com/your-username/subtrack.git
+   cd subtrack
+   cp .env.example .env # Set production values
+   docker-compose up -d --build
+   ```
+4. **Security Groups**: Ensure ports `80` (Web), `8000` (API), and `5432` (DB - internal only) are configured.
 
 ---
 
-## API Reference
+## 🛠 Features
+
+### Premium Subscriptions
+- **Multi-Currency**: Automatic conversion to your Home Currency (USD, INR, EUR, etc.).
+- **Shared Tracking**: Split costs with roommates or family members.
+- **Waste Detection**: AI-powered usage rating to find subscriptions you don't need.
+- **Spending Forecast**: Visual charts for upcoming 12-month spend.
+
+---
+
+## 📜 API Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login |
-| GET | `/api/auth/me` | Get current user |
-| GET | `/api/subscriptions` | List subscriptions |
-| POST | `/api/subscriptions` | Add subscription |
-| PUT | `/api/subscriptions/{id}` | Update subscription |
-| DELETE | `/api/subscriptions/{id}` | Delete subscription |
-| GET | `/api/analytics` | Spend analytics |
-| POST | `/api/payments/create-order` | Create Razorpay order |
-| POST | `/api/payments/verify` | Verify payment |
+| GET | `/api/analytics` | Full spend breakdown (Currency-aware) |
+| POST | `/api/subscriptions` | Create new sub (Supports `num_members`) |
+| GET | `/api/auth/me` | User profile & `home_currency` settings |
 
-Full interactive docs at `http://localhost:8000/docs`.
+Full docs: `http://localhost:8000/docs`
 
 ---
 
-## Market
-
-- **$1.8 trillion** global subscription market
-- **12+** average subscriptions per person
-- **$89/month** wasted on forgotten subscriptions
-- **Target**: Remote workers, households, freelancers, finance-conscious millennials/Gen Z
-
-## Environment Variables
-
-See `.env.example`. Minimum required:
-- `DATABASE_URL` — PostgreSQL connection string
-- `SECRET_KEY` — JWT signing key (32+ chars)
-
-Optional (payments):
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`
+## 🤝 Support
+For enterprise setups or custom integrations, contact the SubTrack dev team.

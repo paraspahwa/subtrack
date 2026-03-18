@@ -1,83 +1,122 @@
+import { createClient } from "@insforge/sdk";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "./config";
+import { INSFORGE_CONFIG } from "./config";
 
-async function getToken() {
-  return AsyncStorage.getItem("st_token");
-}
+// Initialize InsForge Client
+export const insforge = createClient({
+  baseUrl: INSFORGE_CONFIG.baseUrl,
+  anonKey: INSFORGE_CONFIG.anonKey,
+});
 
-async function authHeaders() {
-  const token = await getToken();
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-async function request(path, options = {}) {
-  const headers = await authHeaders();
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || `Request failed: ${res.status}`);
+// Helper to handle SDK responses
+const handle = async (promise) => {
+  const { data, error } = await promise;
+  if (error) {
+    console.error("SDK Error:", error);
+    throw new Error(error.message || "Request failed");
+  }
   return data;
-}
+};
+
+const mapLegacyAuth = (data) => {
+  if (!data?.user) return data;
+  return {
+    access_token: data.accessToken,
+    user_id: data.user.id,
+    email: data.user.email,
+    full_name: data.user.raw_user_meta_data?.name || "",
+    plan: data.user.raw_user_meta_data?.plan || "free",
+    requireEmailVerification: data.requireEmailVerification,
+  };
+};
 
 export const api = {
   // Auth
-  register: (body) => request("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
-  login:    (body) => request("/api/auth/login",    { method: "POST", body: JSON.stringify(body) }),
-  me:       ()     => request("/api/auth/me"),
-  updateMe: (body)   => request("/api/auth/me",    { method: "PUT", body: JSON.stringify(body) }),
-  forgotPassword: (email)        => request("/api/auth/forgot-password",  { method: "POST", body: JSON.stringify({ email }) }),
-  resetPassword:  (token, pwd)   => request("/api/auth/reset-password",   { method: "POST", body: JSON.stringify({ token, new_password: pwd }) }),
-  deleteAccount:  ()             => request("/api/auth/account",           { method: "DELETE" }),
+  register: async ({ email, password, full_name }) => {
+    const { data, error } = await insforge.auth.signUp({
+      email,
+      password,
+      name: full_name,
+    });
+    if (error) throw error;
+    return mapLegacyAuth(data);
+  },
+  
+  verifyEmail: async (email, otp) => {
+    const { data, error } = await insforge.auth.verifyEmail({ email, otp });
+    if (error) throw error;
+    return mapLegacyAuth(data);
+  },
+
+  resendVerification: (email) => handle(insforge.auth.resendVerificationEmail({ email })),
+
+  login: async ({ email, password }) => {
+    const { data, error } = await insforge.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return mapLegacyAuth(data);
+  },
+
+  me: async () => {
+    const { data: userData } = await handle(insforge.auth.getCurrentUser());
+    const { data: profileData } = await handle(insforge.database.from("profiles").select("*").eq("id", userData.user.id).single());
+    return { ...userData.user, ...profileData, full_name: profileData.full_name };
+  },
+
+  updateMe: (body) => handle(insforge.database.from("profiles").update(body).eq("id", insforge.auth.session()?.user?.id)),
+
+  forgotPassword: (email) => handle(insforge.auth.sendResetPasswordEmail({ email })),
+  
+  resetPassword: (token, pwd) => handle(insforge.auth.resetPassword({ newPassword: pwd, otp: token })),
+
+  deleteAccount: () => handle(insforge.auth.signOut()),
 
   // Subscriptions
-  listSubs:   ()       => request("/api/subscriptions"),
-  createSub:  (body)   => request("/api/subscriptions",      { method: "POST", body: JSON.stringify(body) }),
-  updateSub:  (id, b)  => request(`/api/subscriptions/${id}`,{ method: "PUT",  body: JSON.stringify(b)    }),
-  deleteSub:  (id)     => request(`/api/subscriptions/${id}`,{ method: "DELETE" }).catch(() => null),
+  listSubs: () => handle(insforge.database.from("subscriptions").select("*").order("next_billing_date", { ascending: true })),
+  
+  createSub: (body) => handle(insforge.database.from("subscriptions").insert([body]).select().single()),
+  
+  updateSub: (id, b) => handle(insforge.database.from("subscriptions").update(b).eq("id", id).select().single()),
+  
+  deleteSub: (id) => handle(insforge.database.from("subscriptions").delete().eq("id", id)),
 
-  // Analytics
-  analytics: () => request("/api/analytics"),
-  reminderCandidates: (days = 30) => request(`/api/reminders/upcoming?days=${days}`),
-  actionCenterRisk: (days = 30, limit = 20) => request(`/api/action-center/renewal-risk?days=${days}&limit=${limit}`),
-  priceAnomalies: () => request("/api/action-center/price-anomalies"),
-  dismissAmountAlert: (id) => request(`/api/subscriptions/${id}/dismiss-amount-alert`, {
-    method: "POST",
-  }),
-  setCancellationOutcome: (id, outcome) => request(`/api/subscriptions/${id}/cancellation-outcome`, {
-    method: "POST",
-    body: JSON.stringify({ outcome }),
-  }),
+  // Analytics (Edge Functions)
+  analytics: () => handle(insforge.functions.invoke("getanalytics")),
+  
+  reminderCandidates: (days = 30) => {
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + days);
+    return handle(insforge.database.from("subscriptions")
+      .select("*")
+      .gte("next_billing_date", new Date().toISOString())
+      .lte("next_billing_date", horizon.toISOString()));
+  },
+
+  actionCenterRisk: (days = 30) => api.reminderCandidates(days),
+
+  priceAnomalies: () => handle(insforge.database.from("subscriptions").select("*").eq("amount_alert_dismissed", false).not("amount_change_pct", "is", null)),
+
+  dismissAmountAlert: (id) => handle(insforge.database.from("subscriptions").update({ amount_alert_dismissed: true }).eq("id", id)),
+
+  setCancellationOutcome: (id, outcome) => handle(insforge.database.from("subscriptions").update({ 
+    cancellation_outcome: outcome,
+    cancellation_outcome_at: new Date().toISOString()
+  }).eq("id", id)),
 
   // Discovery
-  discoveryMailbox: () => request("/api/discovery/mailbox"),
-  connectDiscoveryMailbox: (provider, email) => request("/api/discovery/mailbox/connect", {
-    method: "POST",
-    body: JSON.stringify({ provider, email }),
-  }),
-  disconnectDiscoveryMailbox: () => request("/api/discovery/mailbox/disconnect", {
-    method: "POST",
-  }),
-  discoveryCandidates: (status = "pending") => request(`/api/discovery/candidates?status=${encodeURIComponent(status)}`),
-  seedDiscoveryDemoCandidates: () => request("/api/discovery/candidates/seed-demo", {
-    method: "POST",
-  }),
-  acceptDiscoveryCandidate: (id) => request(`/api/discovery/candidates/${id}/accept`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  }),
-  rejectDiscoveryCandidate: (id) => request(`/api/discovery/candidates/${id}/reject`, {
-    method: "POST",
-  }),
-  falsePositiveDiscoveryCandidate: (id) => request(`/api/discovery/candidates/${id}/false-positive`, {
-    method: "POST",
-  }),
+  discoveryMailbox: () => handle(insforge.database.from("mailbox_connections").select("*")),
+  
+  connectDiscoveryMailbox: (provider, email) => handle(insforge.database.from("mailbox_connections").insert([{ provider, email }])),
+  
+  disconnectDiscoveryMailbox: () => handle(insforge.database.from("mailbox_connections").delete().eq("user_id", insforge.auth.session()?.user?.id)),
 
-  // Export
-  exportCsvUrl: () => `${API_URL}/api/subscriptions/export.csv`,
+  discoveryCandidates: (status = "pending") => handle(insforge.database.from("discovery_candidates").select("*").eq("status", status)),
 
-  // Payments
-  createOrder:  (body) => request("/api/payments/create-order", { method: "POST", body: JSON.stringify(body) }),
-  verifyPayment:(body) => request("/api/payments/verify",        { method: "POST", body: JSON.stringify(body) }),
+  acceptDiscoveryCandidate: (id) => handle(insforge.functions.invoke("accept-candidate", { body: { id } })), 
+  
+  rejectDiscoveryCandidate: (id) => handle(insforge.database.from("discovery_candidates").update({ status: "rejected" }).eq("id", id)),
+
+  // Payments (Edge Functions)
+  createOrder: (body) => handle(insforge.functions.invoke("razorpay-order", { body })),
+  
+  verifyPayment: (body) => handle(insforge.functions.invoke("razorpay-verify", { body })),
 };
