@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from "react-native";
+import "tailwindcss/tailwind.css";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,6 +12,13 @@ import BrandShapes from "../components/BrandShapes";
 
 export default function AuthScreen({ navigation, route }) {
   const [mode, setMode] = useState(route.params?.mode || "login");
+  const [form, setForm] = useState({ email: "", password: "", fullName: "", confirmPassword: "" });
+  const emailInputRef = useRef(null);
+  useEffect(() => {
+    if (emailInputRef.current) {
+      emailInputRef.current.focus();
+    }
+  }, []);
   const [form, setForm] = useState({ email: "", password: "", fullName: "", confirmPassword: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -115,18 +123,20 @@ export default function AuthScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={s.safe}>
-      <LinearGradient colors={["#fdf7eb", "#f6f3ea"]} style={s.bg}>
+    <SafeAreaView className="relative min-h-screen bg-white">
+      <BrandShapes variant="auth" style={{ position: "absolute", width: "100%", height: "100%" }} />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
+        <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false}>
         <BrandShapes variant="auth" />
-
+    <SafeAreaView accessible={true} accessibilityLabel="Authentication screen" className="relative min-h-screen bg-white">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, gap: 24 }} keyboardShouldPersistTaps="handled">
             <TouchableOpacity style={s.back} onPress={() => navigation.navigate("Landing")} hitSlop={8}>
               <Text style={s.backText}>Back to Home</Text>
             </TouchableOpacity>
 
             <StaggerReveal style={s.card} delay={80} profile="gentle">
-              <View style={s.logoRow}>
+              <View className="flex flex-row justify-center items-center mb-4">
                 <View style={s.logoBadge}><Text style={s.logoBadgeText}>S</Text></View>
                 <Text style={s.logoText}>SubTrack</Text>
               </View>
@@ -137,7 +147,7 @@ export default function AuthScreen({ navigation, route }) {
                   <Text style={s.subtitle}>We've sent a 6-digit code to {form.email}. Enter it below to continue.</Text>
 
                   {error ? (
-                    <View style={s.errorBox}>
+                    <View className="rounded-lg p-3 border border-red-300 bg-red-100 mb-4">
                       <Text style={s.errorText}>{error}</Text>
                     </View>
                   ) : null}
@@ -398,58 +408,4 @@ export default function AuthScreen({ navigation, route }) {
   );
 }
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  bg: { flex: 1 },
-  scroll: { padding: 20, paddingTop: 12 },
-  back: { alignSelf: "flex-start", paddingVertical: 6, paddingHorizontal: 10, backgroundColor: "rgba(255,255,255,0.66)", borderRadius: 999, borderWidth: 1, borderColor: colors.border2, marginBottom: 12 },
-  backText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text2 },
-
-  card: { backgroundColor: "rgba(255,250,240,0.88)", borderWidth: 1, borderColor: colors.border2, borderRadius: 24, padding: 22 },
-  logoRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginBottom: 18 },
-  logoBadge: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginRight: 10 },
-  logoBadgeText: { fontFamily: "Poppins_800ExtraBold", color: "#fff", fontSize: 18 },
-  logoText: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 22 },
-
-  tabs: { flexDirection: "row", borderRadius: 12, backgroundColor: "rgba(255,255,255,0.7)", borderWidth: 1, borderColor: colors.border2, padding: 4, marginBottom: 16 },
-  tabBtn: { flex: 1 },
-  tabSurface: { borderRadius: 8, alignItems: "center", paddingVertical: 10 },
-  tabInactive: { backgroundColor: "transparent" },
-  tabText: { fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text3 },
-  tabTextActive: { color: "#fff" },
-
-  title: { fontFamily: "Poppins_800ExtraBold", fontSize: 26, color: colors.text, textAlign: "center" },
-  subtitle: { fontFamily: "Inter_400Regular", color: colors.text3, textAlign: "center", fontSize: 14, marginTop: 5, marginBottom: 18 },
-
-  errorBox: { borderRadius: 12, padding: 11, borderWidth: 1, borderColor: "rgba(220,38,38,0.25)", backgroundColor: "rgba(220,38,38,0.08)", marginBottom: 14 },
-  errorText: { fontFamily: "Inter_500Medium", color: colors.error, fontSize: 13 },
-  infoBox: { borderRadius: 12, padding: 11, borderWidth: 1, borderColor: "rgba(18,94,89,0.24)", backgroundColor: "rgba(18,94,89,0.09)", marginBottom: 14 },
-  infoText: { fontFamily: "Inter_500Medium", color: colors.primaryDark, fontSize: 13 },
-
-  field: { marginBottom: 14 },
-  label: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12, marginBottom: 6 },
-  input: { backgroundColor: "rgba(255,255,255,0.72)", borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 12, fontFamily: "Inter_400Regular", color: colors.text, fontSize: 15 },
-  passWrap: { position: "relative" },
-  eyeBtn: { position: "absolute", right: 10, top: 11, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(15,23,42,0.07)" },
-  eyeText: { fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text3 },
-
-  forgotWrap: { alignSelf: "flex-end", marginTop: -6, marginBottom: 8 },
-  forgotText: { fontFamily: "Inter_600SemiBold", color: colors.primaryLight, fontSize: 13 },
-
-  submitBtn: { marginTop: 4 },
-  submitBtnLoading: { borderRadius: 13, marginTop: 4 },
-  submitInner: { paddingVertical: 14, alignItems: "center" },
-  submitText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 15 },
-
-  switchRow: { marginTop: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 },
-  switchText: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 13 },
-  switchLink: { fontFamily: "Inter_700Bold", color: colors.primaryLight, fontSize: 13 },
-
-  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(15,23,42,0.38)" },
-  modalCard: { backgroundColor: colors.bg2, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 34 },
-  modalTitle: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 24, marginBottom: 6 },
-  modalSub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 14 },
-  outlineBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 4 },
-  outlineBtnText: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 14 },
-  cancelWrap: { marginTop: 16, alignItems: "center" },
-});
+// Removed StyleSheet styles in favor of Tailwind utility classes

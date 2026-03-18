@@ -1,89 +1,136 @@
 import { View, StyleSheet } from "react-native";
+import { Animated } from "react-native";
+import Svg, { Circle, Rect } from "react-native-svg";
 
+// Brand color palette
+const brandColors = {
+  teal: "#125E59",
+  gold: "#D97706",
+  white: "#FFFFFF",
+};
+
+// Animated shape parameters for each variant
 const variantMap = {
   landing: {
-    a: { top: -70, right: -50, width: 220, height: 220, radius: 999, color: "rgba(18,94,89,0.12)" },
-    b: { bottom: 40, left: -30, width: 180, height: 180, radius: 24, color: "rgba(217,119,6,0.12)", rotate: "18deg" },
-    c: { top: 90, right: 60, width: 120, height: 120, radius: 999, color: "rgba(255,255,255,0.46)" },
-    l1: { top: 160, left: -40, width: 280, rotate: "-14deg", color: "rgba(18,94,89,0.12)" },
-    l2: { bottom: 110, right: -70, width: 240, rotate: "22deg", color: "rgba(217,119,6,0.14)" },
+    a: { top: -70, right: -50, width: 220, height: 220, color: brandColors.teal, opacity: 0.12 },
+    b: { bottom: 40, left: -30, width: 180, height: 180, color: brandColors.gold, opacity: 0.12, rotate: 18 },
+    c: { top: 90, right: 60, width: 120, height: 120, color: brandColors.white, opacity: 0.46 },
+    l1: { top: 160, left: -40, width: 280, color: brandColors.teal, opacity: 0.12, rotate: -14 },
+    l2: { bottom: 110, right: -70, width: 240, color: brandColors.gold, opacity: 0.14, rotate: 22 },
   },
   pricing: {
-    a: { top: -90, right: -20, width: 260, height: 260, radius: 999, color: "rgba(18,94,89,0.10)" },
-    b: { bottom: 90, left: -50, width: 210, height: 140, radius: 26, color: "rgba(217,119,6,0.10)", rotate: "-16deg" },
-    c: { top: 130, right: 20, width: 96, height: 96, radius: 18, color: "rgba(255,255,255,0.42)", rotate: "22deg" },
-    l1: { top: 230, left: -30, width: 320, rotate: "-12deg", color: "rgba(18,94,89,0.10)" },
-    l2: { bottom: 160, right: -50, width: 280, rotate: "19deg", color: "rgba(217,119,6,0.12)" },
+    a: { top: -90, right: -20, width: 260, height: 260, color: brandColors.teal, opacity: 0.10 },
+    b: { bottom: 90, left: -50, width: 210, height: 140, color: brandColors.gold, opacity: 0.10, rotate: -16 },
+    c: { top: 130, right: 20, width: 96, height: 96, color: brandColors.white, opacity: 0.42, rotate: 22 },
+    l1: { top: 230, left: -30, width: 320, color: brandColors.teal, opacity: 0.10, rotate: -12 },
+    l2: { bottom: 160, right: -50, width: 280, color: brandColors.gold, opacity: 0.12, rotate: 19 },
   },
   dashboard: {
-    a: { top: -70, right: -40, width: 200, height: 200, radius: 999, color: "rgba(18,94,89,0.10)" },
-    b: { bottom: -10, left: -40, width: 160, height: 160, radius: 20, color: "rgba(217,119,6,0.10)", rotate: "14deg" },
-    c: { top: 30, right: 120, width: 88, height: 88, radius: 999, color: "rgba(255,255,255,0.36)" },
-    l1: { top: 92, left: -60, width: 240, rotate: "-10deg", color: "rgba(18,94,89,0.10)" },
-    l2: { bottom: 34, right: -60, width: 220, rotate: "18deg", color: "rgba(217,119,6,0.12)" },
+    a: { top: -70, right: -40, width: 200, height: 200, color: brandColors.teal, opacity: 0.10 },
+    b: { bottom: -10, left: -40, width: 160, height: 160, color: brandColors.gold, opacity: 0.10, rotate: 14 },
+    c: { top: 30, right: 120, width: 88, height: 88, color: brandColors.white, opacity: 0.36 },
+    l1: { top: 92, left: -60, width: 240, color: brandColors.teal, opacity: 0.10, rotate: -10 },
+    l2: { bottom: 34, right: -60, width: 220, color: brandColors.gold, opacity: 0.12, rotate: 18 },
   },
   auth: {
-    a: { top: -100, right: -70, width: 230, height: 230, radius: 999, color: "rgba(18,94,89,0.11)" },
-    b: { bottom: 130, left: -70, width: 200, height: 160, radius: 24, color: "rgba(217,119,6,0.12)", rotate: "-20deg" },
-    c: { top: 140, right: 20, width: 90, height: 90, radius: 999, color: "rgba(255,255,255,0.40)" },
-    l1: { top: 230, left: -40, width: 260, rotate: "-16deg", color: "rgba(18,94,89,0.11)" },
-    l2: { bottom: 210, right: -60, width: 240, rotate: "18deg", color: "rgba(217,119,6,0.14)" },
+    a: { top: -100, right: -70, width: 230, height: 230, color: brandColors.teal, opacity: 0.11 },
+    b: { bottom: 130, left: -70, width: 200, height: 160, color: brandColors.gold, opacity: 0.12, rotate: -20 },
+    c: { top: 140, right: 20, width: 90, height: 90, color: brandColors.white, opacity: 0.40 },
+    l1: { top: 230, left: -40, width: 260, color: brandColors.teal, opacity: 0.11, rotate: -16 },
+    l2: { bottom: 210, right: -60, width: 240, color: brandColors.gold, opacity: 0.14, rotate: 18 },
   },
   settings: {
-    a: { top: -80, right: -50, width: 210, height: 210, radius: 999, color: "rgba(18,94,89,0.10)" },
-    b: { bottom: 60, left: -60, width: 180, height: 140, radius: 24, color: "rgba(217,119,6,0.10)", rotate: "-18deg" },
-    c: { top: 170, right: 15, width: 90, height: 90, radius: 999, color: "rgba(255,255,255,0.38)" },
-    l1: { top: 290, left: -50, width: 280, rotate: "-12deg", color: "rgba(18,94,89,0.10)" },
-    l2: { bottom: 140, right: -70, width: 240, rotate: "21deg", color: "rgba(217,119,6,0.12)" },
+    a: { top: -80, right: -50, width: 210, height: 210, color: brandColors.teal, opacity: 0.10 },
+    b: { bottom: 60, left: -60, width: 180, height: 140, color: brandColors.gold, opacity: 0.10, rotate: -18 },
+    c: { top: 170, right: 15, width: 90, height: 90, color: brandColors.white, opacity: 0.38 },
+    l1: { top: 290, left: -50, width: 280, color: brandColors.teal, opacity: 0.10, rotate: -12 },
+    l2: { bottom: 140, right: -70, width: 240, color: brandColors.gold, opacity: 0.12, rotate: 21 },
   },
   modal: {
-    a: { top: -70, right: -45, width: 180, height: 180, radius: 999, color: "rgba(18,94,89,0.10)" },
-    b: { bottom: 40, left: -45, width: 140, height: 140, radius: 18, color: "rgba(217,119,6,0.10)", rotate: "14deg" },
-    c: { top: 120, right: 110, width: 72, height: 72, radius: 999, color: "rgba(255,255,255,0.34)" },
-    l1: { top: 180, left: -60, width: 220, rotate: "-10deg", color: "rgba(18,94,89,0.09)" },
-    l2: { bottom: 70, right: -40, width: 200, rotate: "18deg", color: "rgba(217,119,6,0.10)" },
+    a: { top: -70, right: -45, width: 180, height: 180, color: brandColors.teal, opacity: 0.10 },
+    b: { bottom: 40, left: -45, width: 140, height: 140, color: brandColors.gold, opacity: 0.10, rotate: 14 },
+    c: { top: 120, right: 110, width: 72, height: 72, color: brandColors.white, opacity: 0.34 },
+    l1: { top: 180, left: -60, width: 220, color: brandColors.teal, opacity: 0.09, rotate: -10 },
+    l2: { bottom: 70, right: -40, width: 200, color: brandColors.gold, opacity: 0.10, rotate: 18 },
   },
 };
 
-function shapeStyle(base) {
-  return {
-    position: "absolute",
-    width: base.width,
-    height: base.height,
-    borderRadius: base.radius,
-    backgroundColor: base.color,
-    top: base.top,
-    right: base.right,
-    bottom: base.bottom,
-    left: base.left,
-    transform: base.rotate ? [{ rotate: base.rotate }] : undefined,
-  };
+function AnimatedShape({ shape, animation }) {
+  const scale = animation ? animation.scale : 1;
+  const opacity = animation ? animation.opacity : shape.opacity;
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        top: shape.top,
+        right: shape.right,
+        bottom: shape.bottom,
+        left: shape.left,
+        width: shape.width,
+        height: shape.height,
+        transform: [{ scale }, shape.rotate ? { rotate: `${shape.rotate}deg` } : {}],
+        opacity,
+      }}
+    >
+      <Svg width={shape.width} height={shape.height}>
+        <Circle
+          cx={shape.width / 2}
+          cy={shape.height / 2}
+          r={Math.min(shape.width, shape.height) / 2}
+          fill={shape.color}
+          fillOpacity={shape.opacity}
+        />
+      </Svg>
+    </Animated.View>
+  );
 }
 
-function lineStyle(base) {
-  return {
-    position: "absolute",
-    width: base.width,
-    height: 2,
-    backgroundColor: base.color,
-    top: base.top,
-    right: base.right,
-    bottom: base.bottom,
-    left: base.left,
-    transform: [{ rotate: base.rotate }],
-  };
+function AnimatedLine({ line, animation }) {
+  const opacity = animation ? animation.opacity : line.opacity;
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        top: line.top,
+        right: line.right,
+        bottom: line.bottom,
+        left: line.left,
+        width: line.width,
+        height: 4,
+        transform: [line.rotate ? { rotate: `${line.rotate}deg` } : {}],
+        opacity,
+      }}
+    >
+      <Svg width={line.width} height={4}>
+        <Rect
+          x={0}
+          y={0}
+          width={line.width}
+          height={4}
+          fill={line.color}
+          fillOpacity={line.opacity}
+        />
+      </Svg>
+    </Animated.View>
+  );
 }
 
 export default function BrandShapes({ style, variant = "landing" }) {
   const current = variantMap[variant] || variantMap.landing;
 
+  // Example animation values (could be replaced with Animated API for dynamic transitions)
+  const animation = {
+    scale: 1,
+    opacity: 1,
+  };
+
   return (
     <View pointerEvents="none" style={[s.wrap, style]}>
-      <View style={shapeStyle(current.a)} />
-      <View style={shapeStyle(current.b)} />
-      <View style={shapeStyle(current.c)} />
-      <View style={lineStyle(current.l1)} />
-      <View style={lineStyle(current.l2)} />
+      <AnimatedShape shape={current.a} animation={animation} />
+      <AnimatedShape shape={current.b} animation={animation} />
+      <AnimatedShape shape={current.c} animation={animation} />
+      <AnimatedLine line={current.l1} animation={animation} />
+      <AnimatedLine line={current.l2} animation={animation} />
     </View>
   );
 }
@@ -92,5 +139,6 @@ const s = StyleSheet.create({
   wrap: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
+    zIndex: -1,
   },
 });

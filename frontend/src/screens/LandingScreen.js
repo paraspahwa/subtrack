@@ -37,10 +37,11 @@ export default function LandingScreen({ navigation }) {
         <LinearGradient colors={["#fff8eb", "#f6f3ea", "#efe9da"]} style={s.heroWrap}>
           <BrandShapes variant="landing" />
 
-          <View style={s.nav}>
+    <SafeAreaView accessible={true} accessibilityLabel="Landing screen" style={s.safe}>
             <View style={s.logoWrap}>
-              <View style={s.logoMark}>
+        <LinearGradient colors={["#fff8eb", "#f6f3ea", "#efe9da"]} style={s.heroWrap} accessibilityRole="scrollbar">
                 <Text style={s.logoMarkText}>S</Text>
+          <View accessible={true} accessibilityRole="header" accessibilityLabel="Welcome to SubTrack">
               </View>
               <Text style={s.logoText}>SubTrack</Text>
             </View>

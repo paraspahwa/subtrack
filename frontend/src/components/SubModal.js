@@ -124,62 +124,57 @@ export default function SubModal({ visible, sub, onClose, onSaved }) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={s.safe}>
-        <BrandShapes variant="modal" style={s.bgShapes} />
-        <View style={s.header}>
-          <Text style={s.title}>{isEdit ? "Edit subscription" : "Add subscription"}</Text>
-          <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-            <Text style={s.closeText}>✕</Text>
+      <View className="min-h-screen bg-white rounded-t-2xl p-6 relative">
+        <BrandShapes variant="modal" style={{ position: "absolute", width: "100%", height: "100%" }} />
+        <View className="flex flex-row items-center justify-between mb-6">
+          <Text className="text-xl font-bold text-gray-900">{isEdit ? "Edit subscription" : "Add subscription"}</Text>
+          <TouchableOpacity onPress={onClose} className="rounded-full bg-gray-200 p-2">
+            <Text className="text-lg text-gray-500">×</Text>
           </TouchableOpacity>
         </View>
-
-        <ScrollView style={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-
+        <ScrollView className="flex flex-col gap-4" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {/* ── Quick-add templates (new subs only) ── */}
           {!isEdit && (
-            <StaggerReveal style={s.field} delay={50} profile="snappy">
-              <TouchableOpacity onPress={() => setShowTemplates(v => !v)} style={s.templateToggle}>
-                <Text style={s.label}>Quick add popular services</Text>
-                <Text style={s.templateChevron}>{showTemplates ? "▲" : "▼"}</Text>
+            <StaggerReveal delay={50} profile="snappy">
+              <TouchableOpacity onPress={() => setShowTemplates(v => !v)} className="flex flex-row items-center gap-2 mb-2">
+                <Text className="text-sm font-semibold text-primary">Quick add popular services</Text>
+                <Text className="text-xs text-gray-400">{showTemplates ? "▲" : "▼"}</Text>
               </TouchableOpacity>
               {showTemplates && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.templateRow}>
-                  {TEMPLATES.map(t => (
-                    <TouchableOpacity key={t.name} onPress={() => applyTemplate(t)} style={[s.templateChip, { borderColor: t.color + "55" }]}>
-                      <View style={[s.templateDot, { backgroundColor: t.color }]}>
-                        <Text style={s.templateDotText}>{t.name[0]}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex flex-row gap-2 mb-4">
+                  {TEMPLATES.map((t) => (
+                    <TouchableOpacity key={t.name} onPress={() => applyTemplate(t)} className="flex flex-col items-center border rounded-lg px-3 py-2" style={{ borderColor: t.color + "55" }}>
+                      <View className="rounded-full w-8 h-8 flex items-center justify-center mb-1" style={{ backgroundColor: t.color }}>
+                        <Text className="text-white font-bold">{t.name[0]}</Text>
                       </View>
-                      <Text style={s.templateName}>{t.name}</Text>
-                      <Text style={s.templateAmt}>${t.amount}</Text>
+                      <Text className="text-xs font-semibold text-gray-700">{t.name}</Text>
+                      <Text className="text-xs text-gray-400">${t.amount}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
               )}
             </StaggerReveal>
           )}
-
           {error ? (
-            <View style={s.errorBox}>
-              <Text style={s.errorText}>{error}</Text>
+            <View className="rounded-lg p-3 border border-red-300 bg-red-100 mb-4">
+              <Text className="text-sm text-red-600">{error}</Text>
             </View>
           ) : null}
-
-          <View style={s.field}>
-            <Text style={s.label}>Service Name *</Text>
-            <TextInput style={s.input} placeholder="e.g. Netflix" placeholderTextColor={colors.text4} value={form.name} onChangeText={set("name")} />
+          <View className="mb-4">
+            <Text className="text-xs font-semibold text-gray-700 mb-1">Service Name *</Text>
+            <TextInput className="w-full rounded-lg border border-gray-300 p-2 text-base" placeholder="e.g. Netflix" placeholderTextColor={colors.text4} value={form.name} onChangeText={set("name")} />
           </View>
-
-          <View style={s.row}>
-            <View style={[s.field, { flex: 1 }]}>
-              <Text style={s.label}>Amount *</Text>
-              <TextInput style={s.input} placeholder="9.99" placeholderTextColor={colors.text4} value={form.amount} onChangeText={set("amount")} keyboardType="decimal-pad" />
+          <View className="flex flex-row gap-4 mb-4">
+            <View className="flex-1">
+              <Text className="text-xs font-semibold text-gray-700 mb-1">Amount *</Text>
+              <TextInput className="w-full rounded-lg border border-gray-300 p-2 text-base" placeholder="9.99" placeholderTextColor={colors.text4} value={form.amount} onChangeText={set("amount")} keyboardType="decimal-pad" />
             </View>
-            <View style={[s.field, { flex: 1 }]}>
-              <Text style={s.label}>Currency</Text>
-              <View style={s.picker}>
+            <View className="flex-1">
+              <Text className="text-xs font-semibold text-gray-700 mb-1">Currency</Text>
+              <View className="flex flex-row gap-2">
                 {CURRENCIES.map(c => (
-                  <TouchableOpacity key={c} onPress={() => set("currency")(c)} style={[s.chip, form.currency === c && s.chipActive]}>
-                    <Text style={[s.chipText, form.currency === c && s.chipActiveText]}>{c}</Text>
+                  <TouchableOpacity key={c} onPress={() => set("currency")(c)} className={`px-2 py-1 rounded border ${form.currency === c ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700 border-gray-300'}`}> 
+                    <Text>{c}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

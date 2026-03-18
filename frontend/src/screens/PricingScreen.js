@@ -1,4 +1,5 @@
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from "react-native";
+import "tailwindcss/tailwind.css";
 import { useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
@@ -57,22 +58,31 @@ function isHttpUrl(value) {
 
 export default function PricingScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
+  // Accessibility: focus management
+  const pricingHeaderRef = useRef(null);
+  useEffect(() => {
+    if (pricingHeaderRef.current) {
+      pricingHeaderRef.current.focus();
+    }
+  }, []);
 
   const loadCheckout = () => {
     try {
-      return require("react-native-razorpay").default;
-    } catch {
-      return null;
-    }
-  };
-
-  const ensureWebCheckoutScript = async () => {
-    if (Platform.OS !== "web") return;
-    const win = globalThis?.window;
-    if (!win?.document) throw new Error("Web checkout is unavailable in this environment.");
-    if (win.Razorpay) return;
-
-    await new Promise((resolve, reject) => {
+      <SafeAreaView accessible={true} accessibilityLabel="Pricing screen" className="relative min-h-screen bg-white">
+        <BrandShapes variant="pricing" style={{ position: "absolute", width: "100%", height: "100%" }} />
+        <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false} accessibilityRole="scrollbar">
+          <View ref={pricingHeaderRef} accessible={true} accessibilityRole="header" accessibilityLabel="Pricing & Plans">
+            <StaggerReveal delay={50} profile="snappy">
+              <Text className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Pricing & Plans</Text>
+            </StaggerReveal>
+            <StaggerReveal delay={80} profile="gentle">
+              <Text className="text-2xl font-bold text-gray-900">Choose your plan</Text>
+              <Text className="text-base text-gray-500">Upgrade for unlimited tracking and advanced analytics.</Text>
+            </StaggerReveal>
+          </View>
+          {/* ...existing code... */}
+        </ScrollView>
+      </SafeAreaView>
       const existing = win.document.querySelector(`script[src="${WEB_CHECKOUT_SCRIPT}"]`);
       if (existing) {
         existing.addEventListener("load", () => resolve());
@@ -269,42 +279,11 @@ export default function PricingScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  bgShapes: { opacity: 0.72 },
-  scroll: { padding: 20, paddingBottom: 34 },
 
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  back: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.62)" },
-  backText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text2 },
-  topPill: { fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.primary, textTransform: "uppercase", letterSpacing: 1 },
 
-  title: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 33, lineHeight: 39, marginBottom: 8 },
-  sub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 15, lineHeight: 22, marginBottom: 20 },
 
-  grid: { gap: 14 },
-  card: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border2, borderRadius: 22, padding: 20 },
-  plan: { fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text3, textTransform: "uppercase", letterSpacing: 1 },
-  priceRow: { flexDirection: "row", alignItems: "flex-end", gap: 4, marginVertical: 6 },
-  price: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 50, lineHeight: 52 },
-  per: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 15, marginBottom: 7 },
-  desc: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 8 },
 
-  featureList: { marginTop: 8, marginBottom: 14 },
-  featureRow: { flexDirection: "row", alignItems: "center", marginBottom: 9 },
-  dot: { width: 7, height: 7, borderRadius: 7, backgroundColor: colors.primary, marginRight: 10 },
-  featureText: { fontFamily: "Inter_500Medium", color: colors.text2, fontSize: 14, flex: 1 },
 
-  proCard: { borderRadius: 22, padding: 20 },
-  badge: { alignSelf: "flex-start", backgroundColor: "rgba(248,250,252,0.15)", borderWidth: 1, borderColor: "rgba(248,250,252,0.38)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, fontFamily: "Inter_700Bold", color: "#f8fafc", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
-  planPro: { fontFamily: "Inter_700Bold", fontSize: 13, color: "rgba(248,250,252,0.88)", textTransform: "uppercase", letterSpacing: 1 },
-  pricePro: { fontFamily: "Poppins_900Black", color: "#f8fafc", fontSize: 50, lineHeight: 52 },
-  perPro: { fontFamily: "Inter_500Medium", color: "rgba(248,250,252,0.78)", fontSize: 15, marginBottom: 7 },
-  descPro: { fontFamily: "Inter_400Regular", color: "rgba(248,250,252,0.82)", fontSize: 14, lineHeight: 20, marginBottom: 8 },
-  dotPro: { width: 7, height: 7, borderRadius: 7, backgroundColor: "#fde68a", marginRight: 10 },
-  featureTextPro: { fontFamily: "Inter_500Medium", color: "#f8fafc", fontSize: 14, flex: 1 },
-  proBtnLoading: { marginTop: 4, borderRadius: 12, backgroundColor: "#f8fafc", paddingVertical: 13, alignItems: "center" },
-  proInteractiveText: { color: colors.primaryDark },
-  checkoutHint: { marginTop: 10, fontFamily: "Inter_500Medium", color: "rgba(248,250,252,0.75)", fontSize: 12 },
 
-  footer: { marginTop: 16, textAlign: "center", fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 12 },
+  // Removed StyleSheet styles in favor of Tailwind utility classes
 });

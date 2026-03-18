@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, CATEGORIES } from "../theme";
 import { api, insforge } from "../api";
 import SubCard from "../components/SubCard";
@@ -12,6 +11,7 @@ import { syncRenewalReminders } from "../notifications";
 import StaggerReveal from "../components/StaggerReveal";
 import InteractiveButton from "../components/InteractiveButton";
 import BrandShapes from "../components/BrandShapes";
+import "tailwindcss/tailwind.css";
 
 const FREE_LIMIT = 10;
 
@@ -40,33 +40,23 @@ export default function DashboardScreen({ navigation }) {
         api.listSubs(),
         api.analytics(),
         api.me(),
-      ]);
-      setSubs(subsData);
-      setAnalytics(analyticsData);
-      setUserInfo(meData);
-
-      const reminderPref = await AsyncStorage.getItem("st_notifications");
-      const remindersOn = reminderPref === "true";
-      setNotificationsEnabled(remindersOn);
-
-      try {
-        const actionCenterData = await api.actionCenterRisk(30, 20);
-        setActionCenterItems(actionCenterData?.items || []);
-      } catch {
+          <SafeAreaView className="relative min-h-screen bg-white">
+            <BrandShapes variant="dashboard" style={{ position: "absolute", width: "100%", height: "100%" }} />
+            <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchAll(true)} />}>
+              <StaggerReveal delay={50} profile="snappy">
+                <Text className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Dashboard</Text>
+              </StaggerReveal>
+              <StaggerReveal delay={80} profile="gentle">
+                <Text className="text-2xl font-bold text-gray-900">Your Subscriptions</Text>
+                <Text className="text-base text-gray-500">Track, manage, and analyze your recurring spend.</Text>
+              </StaggerReveal>
+              {/* ...existing code... */}
+            </ScrollView>
+          </SafeAreaView>
         setActionCenterItems([]);
       }
 
-      if (remindersOn && Platform.OS !== "web") {
-        const reminderData = await api.reminderCandidates(30);
-        await syncRenewalReminders(reminderData.items || []);
-      }
-    } catch (e) {
-      if (e.message?.includes("401")) {
-        await insforge.auth.signOut();
-        navigation.reset({ index: 0, routes: [{ name: "Landing" }] });
-      }
-    } finally {
-      setLoading(false);
+      // Removed StyleSheet styles in favor of Tailwind utility classes
       setRefreshing(false);
     }
   }, [navigation]);
