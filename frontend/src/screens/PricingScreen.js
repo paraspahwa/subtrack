@@ -1,12 +1,10 @@
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from "react-native";
-import "tailwindcss/tailwind.css";
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform, useRef, useEffect } from "react-native";
 import { useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme";
-import { api } from "../api";
+import { api, insforge } from "../api";
 import StaggerReveal from "../components/StaggerReveal";
 import InteractiveButton from "../components/InteractiveButton";
 import BrandShapes from "../components/BrandShapes";
@@ -58,38 +56,17 @@ function isHttpUrl(value) {
 
 export default function PricingScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
-  // Accessibility: focus management
-  const pricingHeaderRef = useRef(null);
-  useEffect(() => {
-    if (pricingHeaderRef.current) {
-      pricingHeaderRef.current.focus();
-    }
-  }, []);
 
-  const loadCheckout = () => {
-    try {
-      <SafeAreaView accessible={true} accessibilityLabel="Pricing screen" className="relative min-h-screen bg-white">
-        <BrandShapes variant="pricing" style={{ position: "absolute", width: "100%", height: "100%" }} />
-        <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false} accessibilityRole="scrollbar">
-          <View ref={pricingHeaderRef} accessible={true} accessibilityRole="header" accessibilityLabel="Pricing & Plans">
-            <StaggerReveal delay={50} profile="snappy">
-              <Text className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Pricing & Plans</Text>
-            </StaggerReveal>
-            <StaggerReveal delay={80} profile="gentle">
-              <Text className="text-2xl font-bold text-gray-900">Choose your plan</Text>
-              <Text className="text-base text-gray-500">Upgrade for unlimited tracking and advanced analytics.</Text>
-            </StaggerReveal>
-          </View>
-          {/* ...existing code... */}
-        </ScrollView>
-      </SafeAreaView>
+  const ensureWebCheckoutScript = () => {
+    return new Promise((resolve, reject) => {
+      const win = globalThis.window;
       const existing = win.document.querySelector(`script[src="${WEB_CHECKOUT_SCRIPT}"]`);
       if (existing) {
+        if (win.Razorpay) return resolve();
         existing.addEventListener("load", () => resolve());
         existing.addEventListener("error", () => reject(new Error("Could not load checkout script.")));
         return;
       }
-
       const script = win.document.createElement("script");
       script.src = WEB_CHECKOUT_SCRIPT;
       script.async = true;
@@ -97,10 +74,6 @@ export default function PricingScreen({ navigation }) {
       script.onerror = () => reject(new Error("Could not load checkout script."));
       win.document.body.appendChild(script);
     });
-
-    if (!win.Razorpay) {
-      throw new Error("Web checkout did not initialize.");
-    }
   };
 
   const openWebCheckout = async (order) => {
@@ -142,15 +115,11 @@ export default function PricingScreen({ navigation }) {
     if (!isVerificationSuccess(verifyResult)) {
       throw new Error("Payment was initiated but verification is pending. Please refresh in a minute.");
     }
-    // InsForge profile is updated by the razorpay-verify edge function.
-    // No local cache write needed.
   };
 
   const handleUpgrade = async () => {
-    const { data: sessionData, error: sessionError } = await insforge.auth.getCurrentSession();
-    if (sessionError || !sessionData?.session?.user?.id) throw sessionError || new Error("No active session");
-    const data = { user: sessionData.session.user };
-    if (!data?.user) {
+    const { data: userData, error: sessionError } = await insforge.auth.getCurrentUser();
+    if (sessionError || !userData?.user?.id) {
       navigation.navigate("Auth", { mode: "signup" });
       return;
     }
@@ -163,7 +132,9 @@ export default function PricingScreen({ navigation }) {
       if (Platform.OS === "web") {
         paymentData = await openWebCheckout(order);
       } else {
-        const RazorpayCheckout = loadCheckout();
+        let RazorpayCheckout = null;
+        try { RazorpayCheckout = require("react-native-razorpay").default; } catch {}
+
         if (RazorpayCheckout) {
           paymentData = await RazorpayCheckout.open({
             description: "SubTrack Pro — Unlimited subscriptions",
@@ -238,36 +209,36 @@ export default function PricingScreen({ navigation }) {
         <View style={s.grid}>
           <StaggerReveal delay={90} profile="snappy">
             <View style={s.card}>
-            <Text style={s.plan}>Free</Text>
-            <View style={s.priceRow}><Text style={s.price}>$0</Text><Text style={s.per}>/month</Text></View>
-            <Text style={s.desc}>For individuals getting visibility into recurring spend.</Text>
-            <FeatureList items={FREE_FEATURES} />
-            <InteractiveButton label="Start Free" variant="ghost" onPress={() => navigation.navigate("Auth", { mode: "signup" })} />
+              <Text style={s.plan}>Free</Text>
+              <View style={s.priceRow}><Text style={s.price}>$0</Text><Text style={s.per}>/month</Text></View>
+              <Text style={s.desc}>For individuals getting visibility into recurring spend.</Text>
+              <FeatureList items={FREE_FEATURES} />
+              <InteractiveButton label="Start Free" variant="ghost" onPress={() => navigation.navigate("Auth", { mode: "signup" })} />
             </View>
           </StaggerReveal>
 
           <StaggerReveal delay={170} profile="smooth">
             <LinearGradient colors={["#0f4b47", "#125e59"]} style={s.proCard}>
-            <Text style={s.badge}>Recommended</Text>
-            <Text style={s.planPro}>Pro</Text>
-            <View style={s.priceRow}><Text style={s.pricePro}>$9</Text><Text style={s.perPro}>/month</Text></View>
-            <Text style={s.descPro}>For power users who optimize every renewal decision.</Text>
-            <View style={s.featureList}>
-              {PRO_FEATURES.map((item) => (
-                <View key={item} style={s.featureRow}>
-                  <View style={s.dotPro} />
-                  <Text style={s.featureTextPro}>{item}</Text>
-                </View>
-              ))}
-            </View>
-            {loading ? (
-              <TouchableOpacity style={s.proBtnLoading} disabled>
-                <ActivityIndicator color={colors.primaryDark} />
-              </TouchableOpacity>
-            ) : (
-              <InteractiveButton label="Upgrade to Pro" variant="ghost" onPress={handleUpgrade} textStyle={s.proInteractiveText} />
-            )}
-            <Text style={s.checkoutHint}>{Platform.OS === "web" ? "Secure web checkout opens in-browser." : "Secure checkout uses Razorpay."}</Text>
+              <Text style={s.badge}>Recommended</Text>
+              <Text style={s.planPro}>Pro</Text>
+              <View style={s.priceRow}><Text style={s.pricePro}>$9</Text><Text style={s.perPro}>/month</Text></View>
+              <Text style={s.descPro}>For power users who optimize every renewal decision.</Text>
+              <View style={s.featureList}>
+                {PRO_FEATURES.map((item) => (
+                  <View key={item} style={s.featureRow}>
+                    <View style={s.dotPro} />
+                    <Text style={s.featureTextPro}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+              {loading ? (
+                <TouchableOpacity style={s.proBtnLoading} disabled>
+                  <ActivityIndicator color={colors.primaryDark} />
+                </TouchableOpacity>
+              ) : (
+                <InteractiveButton label="Upgrade to Pro" variant="ghost" onPress={handleUpgrade} textStyle={s.proInteractiveText} />
+              )}
+              <Text style={s.checkoutHint}>{Platform.OS === "web" ? "Secure web checkout opens in-browser." : "Secure checkout uses Razorpay."}</Text>
             </LinearGradient>
           </StaggerReveal>
         </View>
@@ -279,11 +250,36 @@ export default function PricingScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-
-
-
-
-
-
-  // Removed StyleSheet styles in favor of Tailwind utility classes
+  safe: { flex: 1, backgroundColor: colors.bg },
+  bgShapes: { opacity: 0.62 },
+  scroll: { padding: 20, paddingBottom: 40 },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  back: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.64)" },
+  backText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 12 },
+  topPill: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
+  title: { fontFamily: "Poppins_800ExtraBold", fontSize: 28, color: colors.text, lineHeight: 34, marginBottom: 8 },
+  sub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 15, lineHeight: 22, marginBottom: 24 },
+  grid: { gap: 16 },
+  card: { borderWidth: 1, borderColor: colors.border2, borderRadius: 22, backgroundColor: colors.card, padding: 20 },
+  plan: { fontFamily: "Inter_700Bold", color: colors.text3, fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
+  priceRow: { flexDirection: "row", alignItems: "flex-end", gap: 2, marginBottom: 8 },
+  price: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 40, lineHeight: 44 },
+  per: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 14, marginBottom: 6 },
+  desc: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  featureList: { gap: 10, marginBottom: 20 },
+  featureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+  featureText: { fontFamily: "Inter_500Medium", color: colors.text2, fontSize: 14, flex: 1 },
+  proCard: { borderRadius: 22, padding: 20 },
+  badge: { fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.7)", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
+  planPro: { fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.8)", fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
+  pricePro: { fontFamily: "Poppins_900Black", color: "#fff", fontSize: 40, lineHeight: 44 },
+  perPro: { fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", fontSize: 14, marginBottom: 6 },
+  descPro: { fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)", fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  dotPro: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.7)" },
+  featureTextPro: { fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.9)", fontSize: 14, flex: 1 },
+  proBtnLoading: { borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.5)", paddingVertical: 13, alignItems: "center" },
+  proInteractiveText: { color: colors.primaryDark },
+  checkoutHint: { fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)", fontSize: 12, textAlign: "center", marginTop: 10 },
+  footer: { fontFamily: "Inter_500Medium", color: colors.text4, textAlign: "center", marginTop: 20, fontSize: 13 },
 });

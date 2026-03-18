@@ -36,20 +36,14 @@ export default function LandingScreen({ navigation }) {
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={["#fff8eb", "#f6f3ea", "#efe9da"]} style={s.heroWrap}>
           <BrandShapes variant="landing" />
-
-    <SafeAreaView accessible={true} accessibilityLabel="Landing screen" style={s.safe}>
-            <View style={s.logoWrap}>
-        <LinearGradient colors={["#fff8eb", "#f6f3ea", "#efe9da"]} style={s.heroWrap} accessibilityRole="scrollbar">
-                <Text style={s.logoMarkText}>S</Text>
-          <View accessible={true} accessibilityRole="header" accessibilityLabel="Welcome to SubTrack">
-              </View>
-              <Text style={s.logoText}>SubTrack</Text>
-            </View>
-            <TouchableOpacity style={s.navBtn} onPress={() => navigation.navigate("Auth", { mode: "login" })}>
-              <Text style={s.navBtnText}>Log In</Text>
-            </TouchableOpacity>
+          <View style={s.logoWrap}>
+            <Text style={s.logoMarkText}>S</Text>
+            <View accessible={true} accessibilityRole="header" accessibilityLabel="Welcome to SubTrack" />
+            <Text style={s.logoText}>SubTrack</Text>
           </View>
-
+          <TouchableOpacity style={s.navBtn} onPress={() => navigation.navigate("Auth", { mode: "login" })}>
+            <Text style={s.navBtnText}>Log In</Text>
+          </TouchableOpacity>
           <StaggerReveal style={s.heroContent} delay={60} profile="gentle">
             <Text style={s.kicker}>Subscription clarity for modern teams and individuals</Text>
             <Text style={s.heroTitle}>
@@ -59,16 +53,13 @@ export default function LandingScreen({ navigation }) {
             <Text style={s.heroSub}>
               SubTrack transforms recurring charges into a visual control panel. Make smarter cancel, keep, and upgrade decisions in minutes.
             </Text>
-
             <View style={s.heroActions}>
               <InteractiveButton label="Start Free" onPress={() => navigation.navigate("Auth", { mode: "signup" })} />
               <InteractiveButton label="View Pricing" variant="ghost" onPress={() => navigation.navigate("Pricing")} />
             </View>
-
             <Text style={s.heroNote}>No credit card required • Free tier available forever</Text>
           </StaggerReveal>
         </LinearGradient>
-
         <StaggerReveal style={s.metricsRow} delay={130} profile="snappy">
           {METRICS.map((m) => (
             <View key={m.label} style={s.metricCard}>
@@ -77,11 +68,9 @@ export default function LandingScreen({ navigation }) {
             </View>
           ))}
         </StaggerReveal>
-
         <StaggerReveal style={s.section} delay={190} profile="smooth">
           <Text style={s.sectionTitle}>Built like a product, not a spreadsheet</Text>
           <Text style={s.sectionSub}>A crisp workflow from first add to confident cancellation.</Text>
-
           {PILLARS.map((p) => (
             <View key={p.title} style={s.pillarCard}>
               <View style={s.pillarIndex}><Text style={s.pillarIndexText}>{p.icon}</Text></View>
@@ -92,21 +81,19 @@ export default function LandingScreen({ navigation }) {
             </View>
           ))}
         </StaggerReveal>
-
         <StaggerReveal delay={250} profile="smooth">
           <LinearGradient colors={["#0f4b47", "#125e59"]} style={s.ctaWrap}>
-          <Text style={s.ctaTitle}>Take back your recurring spend today</Text>
-          <Text style={s.ctaSub}>Join SubTrack and turn hidden renewals into predictable, intentional spending.</Text>
-          <InteractiveButton
-            label="Create My Account"
-            variant="ghost"
-            onPress={() => navigation.navigate("Auth", { mode: "signup" })}
-            style={s.ctaInteractive}
-            textStyle={s.ctaInteractiveText}
-          />
+            <Text style={s.ctaTitle}>Take back your recurring spend today</Text>
+            <Text style={s.ctaSub}>Join SubTrack and turn hidden renewals into predictable, intentional spending.</Text>
+            <InteractiveButton
+              label="Create My Account"
+              variant="ghost"
+              onPress={() => navigation.navigate("Auth", { mode: "signup" })}
+              style={s.ctaInteractive}
+              textStyle={s.ctaInteractiveText}
+            />
           </LinearGradient>
         </StaggerReveal>
-
         <View style={s.footer}>
           <Text style={s.footerText}>SubTrack • Spend better, not harder.</Text>
         </View>

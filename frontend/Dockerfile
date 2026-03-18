@@ -8,8 +8,13 @@ RUN npm install --legacy-peer-deps
 
 COPY . .
 
+
 # Export static web build via Expo
 RUN npx expo export --platform web
+
+# Also copy dist to public for static host compatibility
+RUN cp -r /app/dist /app/public
+RUN cp /app/dist/index.html /app/public/index.html
 
 # ── Stage 2: Serve with Nginx ─────────────────────────────────────────
 FROM nginx:alpine

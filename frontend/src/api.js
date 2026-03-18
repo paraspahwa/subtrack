@@ -63,9 +63,9 @@ export const api = {
   },
 
   updateMe: async (body) => {
-    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
-    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
-    return handle(insforge.database.from("profiles").update(body).eq("id", sessionData.session.user.id));
+    const { data: userData, error } = await insforge.auth.getCurrentUser();
+    if (error || !userData?.user?.id) throw error || new Error("No active session");
+    return handle(insforge.database.from("profiles").update(body).eq("id", userData.user.id));
   },
 
   forgotPassword: (email) => handle(insforge.auth.sendResetPasswordEmail({ email })),
@@ -78,9 +78,9 @@ export const api = {
   listSubs: () => handle(insforge.database.from("subscriptions").select("*").order("next_billing_date", { ascending: true })),
   
   createSub: async (body) => {
-    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
-    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
-    const userId = sessionData.session.user.id;
+    const { data: userData, error } = await insforge.auth.getCurrentUser();
+    if (error || !userData?.user?.id) throw error || new Error("No active session");
+    const userId = userData.user.id;
     return handle(insforge.database.from("subscriptions").insert([{ ...body, user_id: userId }]).select().single());
   },
   
@@ -115,23 +115,37 @@ export const api = {
   discoveryMailbox: () => handle(insforge.database.from("mailbox_connections").select("*")),
   
   connectDiscoveryMailbox: async (provider, email) => {
-    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
-    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
-    const userId = sessionData.session.user.id;
+    const { data: userData, error } = await insforge.auth.getCurrentUser();
+    if (error || !userData?.user?.id) throw error || new Error("No active session");
+    const userId = userData.user.id;
     return handle(insforge.database.from("mailbox_connections").insert([{ provider, email, user_id: userId }]));
   },
-  
+
   disconnectDiscoveryMailbox: async () => {
-    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
-    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
-    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", sessionData.session.user.id));
+    const { data: userData, error } = await insforge.auth.getCurrentUser();
+    if (error || !userData?.user?.id) throw error || new Error("No active session");
+    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", userData.user.id));
   },
 
   discoveryCandidates: (status = "pending") => handle(insforge.database.from("discovery_candidates").select("*").eq("status", status)),
 
-  acceptDiscoveryCandidate: (id) => handle(insforge.functions.invoke("accept-candidate", { body: { id } })), 
-  
+  acceptDiscoveryCandidate: (id) => handle(insforge.functions.invoke("accept-candidate", { body: { id } })),
+
   rejectDiscoveryCandidate: (id) => handle(insforge.database.from("discovery_candidates").update({ status: "rejected" }).eq("id", id)),
+
+  falsePositiveDiscoveryCandidate: (id) => handle(insforge.database.from("discovery_candidates").update({ status: "false_positive" }).eq("id", id)),
+
+  seedDiscoveryDemoCandidates: async () => {
+    const { data: userData, error } = await insforge.auth.getCurrentUser();
+    if (error || !userData?.user?.id) throw error || new Error("No active session");
+    const userId = userData.user.id;
+    const demoData = [
+      { user_id: userId, merchant_name: "Netflix", amount: 15.99, currency: "USD", billing_cycle_guess: "monthly", confidence: 0.95 },
+      { user_id: userId, merchant_name: "Spotify", amount: 9.99, currency: "USD", billing_cycle_guess: "monthly", confidence: 0.92 },
+      { user_id: userId, merchant_name: "Adobe Creative Cloud", amount: 54.99, currency: "USD", billing_cycle_guess: "monthly", confidence: 0.88 },
+    ];
+    return handle(insforge.database.from("discovery_candidates").insert(demoData));
+  },
 
   // Payments (Edge Functions)
   createOrder: (body) => handle(insforge.functions.invoke("razorpay-order", { body })),

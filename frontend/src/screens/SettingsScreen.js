@@ -1,5 +1,4 @@
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Switch, Linking, Platform, TextInput, ActivityIndicator } from "react-native";
-import "tailwindcss/tailwind.css";
 import { useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -56,9 +55,9 @@ export default function SettingsScreen({ navigation }) {
       setMailbox(mailboxData);
       if (mailboxData?.email) setMailboxEmail(mailboxData.email);
       if (mailboxData?.provider) setMailboxProvider(String(mailboxData.provider).toLowerCase());
-    <SafeAreaView className="relative min-h-screen bg-gray-50">
+    } catch (err) {
       setMailboxError(err.message || "Failed to load mailbox status.");
-      <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false}>
+    } finally {
       setMailboxLoading(false);
     }
   };
@@ -76,7 +75,15 @@ export default function SettingsScreen({ navigation }) {
       setCandidatesLoading(false);
     }
   };
-// Removed StyleSheet styles in favor of Tailwind utility classes
+  const handleConnectMailbox = async () => {
+    if (!mailboxEmail.trim()) return setMailboxError("Enter your mailbox email.");
+    setConnectLoading(true);
+    setMailboxError("");
+    try {
+      await api.connectDiscoveryMailbox(mailboxProvider.trim() || "gmail", mailboxEmail.trim());
+      await loadDiscoveryMailbox();
+    } catch (err) {
+      setMailboxError(err.message || "Failed to connect mailbox.");
     } finally {
       setConnectLoading(false);
     }
@@ -237,16 +244,14 @@ export default function SettingsScreen({ navigation }) {
 
         <StaggerReveal style={s.section} delay={190} profile="smooth">
           <Text style={s.sectionLabel}>Data & Support</Text>
-          <SafeAreaView accessible={true} accessibilityLabel="Settings screen" style={s.safe}>
-          <View style={s.divider} />
-            <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} accessibilityRole="scrollbar">
+          <Row label="Export as CSV" onPress={handleExportCSV} />
           <View style={s.divider} />
           <Row label="Report a bug" onPress={() => Linking.openURL("https://github.com/paraspahwa/subtrack/issues")} />
         </StaggerReveal>
 
         <StaggerReveal style={s.section} delay={205} profile="smooth">
           <Text style={s.sectionLabel}>Discovery</Text>
-                <Text style={s.title} accessible={true} accessibilityRole="header" accessibilityLabel="Settings">Settings</Text>
+          <Text style={s.discoveryHint}>{mailboxStatusLabel}</Text>
           {!!mailbox?.provider && <Text style={s.discoveryHint}>Provider: {String(mailbox.provider).toUpperCase()}</Text>}
           {mailboxLoading && <ActivityIndicator style={s.discoveryLoader} color={colors.primary} />}
           {!!mailboxError && <Text style={s.errorText}>{mailboxError}</Text>}
@@ -298,65 +303,63 @@ export default function SettingsScreen({ navigation }) {
           <View style={s.discoveryDivider} />
           <Text style={s.discoverySubLabel}>Pending Candidates</Text>
           {candidatesLoading ? (
-            <ActivityIndicator style={s.discoveryLoader} color={colors.primary} />
+            <ActivityIndicator style={s.discoveryLoader} color={colors.primary} accessibilityLabel="Loading candidates" />
           ) : candidates.length === 0 ? (
             <Text style={s.emptyText}>No pending candidates.</Text>
           ) : (
-            candidates.map((candidate, index) => {
-              const id = candidate?.id;
-                    accessible={true}
-                    accessibilityLabel="Mailbox provider"
-              const isActing = candidateActionId === id;
-              const canAct = Boolean(id) && !isActing;
-              const merchant = candidate?.merchant || candidate?.merchant_name || candidate?.name || "Unknown merchant";
-              const amount = formatCurrency(candidate?.amount, candidate?.currency || "USD");
-              const confidence = formatConfidence(candidate?.confidence);
+            <>
+              {candidates.map((candidate, index) => {
+                const id = candidate?.id;
+                const isActing = candidateActionId === id;
+                const canAct = Boolean(id) && !isActing;
+                const merchant = candidate?.merchant || candidate?.merchant_name || candidate?.name || "Unknown merchant";
+                const amount = formatCurrency(candidate?.amount, candidate?.currency || "USD");
+                const confidence = formatConfidence(candidate?.confidence);
 
-              return (
-                <View key={id ? String(id) : `candidate-${index}`} style={s.candidateCard}>
-                  <View style={s.candidateTopRow}>
-                    accessible={true}
-                    accessibilityLabel="Mailbox email"
-                    <Text style={s.candidateMerchant}>{merchant}</Text>
-                    <Text style={s.candidateMeta}>{amount}</Text>
+                return (
+                  <View key={id ? String(id) : `candidate-${index}`} style={s.candidateCard} accessible={true} accessibilityLabel="Mailbox provider">
+                    <View style={s.candidateTopRow} accessible={true} accessibilityLabel="Mailbox email">
+                      <Text style={s.candidateMerchant}>{merchant}</Text>
+                      <Text style={s.candidateMeta}>{amount}</Text>
+                    </View>
+                    <Text style={s.candidateMeta}>Confidence: {confidence}</Text>
+                    <View style={s.candidateActionRow}>
+                      <TouchableOpacity
+                        style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
+                        onPress={() => handleCandidateAction(id, "accept")}
+                        accessible={true}
+                        accessibilityRole="button"
+                        accessibilityLabel="Accept candidate"
+                        disabled={!canAct}
+                      >
+                        <Text style={s.candidateBtnText}>Accept</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
+                        onPress={() => handleCandidateAction(id, "reject")}
+                        accessible={true}
+                        accessibilityRole="button"
+                        accessibilityLabel="Reject candidate"
+                        disabled={!canAct}
+                      >
+                        <Text style={s.candidateBtnText}>Reject</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
+                        onPress={() => handleCandidateAction(id, "false-positive")}
+                        accessible={true}
+                        accessibilityRole="button"
+                        accessibilityLabel="Mark candidate as false positive"
+                        disabled={!canAct}
+                      >
+                        <Text style={s.candidateBtnText}>False Positive</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <Text style={s.candidateMeta}>Confidence: {confidence}</Text>
-                  <View style={s.candidateActionRow}>
-                    <TouchableOpacity
-                      style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
-                      onPress={() => handleCandidateAction(id, "accept")}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel="Connect mailbox"
-                      disabled={!canAct}
-                    >
-                      <Text style={s.candidateBtnText}>Accept</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
-                      onPress={() => handleCandidateAction(id, "reject")}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel="Disconnect mailbox"
-                      disabled={!canAct}
-                    >
-                      <Text style={s.candidateBtnText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[s.candidateBtn, !canAct && s.actionBtnDisabled]}
-                      onPress={() => handleCandidateAction(id, "false-positive")}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel="Seed demo candidates"
-                      disabled={!canAct}
-                    >
-                      <Text style={s.candidateBtnText}>False Positive</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
-                  <ActivityIndicator style={s.discoveryLoader} color={colors.primary} accessibilityLabel="Loading candidates" />
+                );
+              })}
+            </>
+          )}
           {!!candidatesError && <Text style={s.errorText}>{candidatesError}</Text>}
         </StaggerReveal>
 
@@ -379,20 +382,12 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   bgShapes: { opacity: 0.62 },
   scroll: { padding: 20, paddingBottom: 34 },
-
-                            accessible={true}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Accept candidate ${merchant}`}
   headRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   back: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.64)" },
   backText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 12 },
   badge: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
-
   title: { fontFamily: "Poppins_900Black", fontSize: 34, color: colors.text, marginBottom: 6 },
   sub: { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text3, lineHeight: 21, marginBottom: 16 },
-                            accessible={true}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Reject candidate ${merchant}`}
 
   section: { borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.card, borderRadius: 18, padding: 14, marginBottom: 12 },
   sectionLabel: { fontFamily: "Inter_700Bold", color: colors.text3, textTransform: "uppercase", letterSpacing: 1, fontSize: 11, marginBottom: 7 },
@@ -400,9 +395,6 @@ const s = StyleSheet.create({
 
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 13, gap: 10 },
   rowLabel: { fontFamily: "Inter_500Medium", color: colors.text, fontSize: 15, flex: 1 },
-                            accessible={true}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Mark candidate ${merchant} as false positive`}
   rowLabelDanger: { color: colors.error },
   rowValue: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 13, maxWidth: "60%" },
   rowChevron: { fontFamily: "Inter_700Bold", color: colors.text4, fontSize: 17 },

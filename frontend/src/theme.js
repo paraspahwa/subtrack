@@ -1,40 +1,53 @@
 export const colors = {
-  bg:           "#f6f3ea",
-  bg2:          "#fffdf8",
-  bg3:          "#f0ebde",
-  card:         "#fffaf0",
-  card2:        "#fff7e5",
+  // Backgrounds — clean white, modern neutrals
+  bg:           "#f8f9fb",
+  bg2:          "#ffffff",
+  bg3:          "#f0f2f5",
+  card:         "#ffffff",
+  card2:        "#f4f6f9",
 
-  border:       "rgba(18,94,89,0.24)",
-  border2:      "rgba(15,23,42,0.10)",
+  // Borders — crisp, minimal
+  border:       "rgba(13,92,87,0.18)",
+  border2:      "rgba(15,23,42,0.09)",
+  border3:      "rgba(15,23,42,0.16)",
 
-  text:         "#1f2937",
-  text2:        "#334155",
+  // Text — rich hierarchy
+  text:         "#0f172a",
+  text2:        "#1e293b",
   text3:        "#64748b",
   text4:        "#94a3b8",
+  text5:        "#cbd5e1",
 
-  primary:      "#125e59",
-  primaryDark:  "#0f4b47",
-  primaryLight: "#1f7a73",
-  cyan:         "#d97706",
-  cyanLight:    "#f59e0b",
+  // Brand — deep teal
+  primary:      "#0d5c57",
+  primaryDark:  "#0a4844",
+  primaryLight: "#178077",
+  primaryBg:    "rgba(13,92,87,0.08)",
+  primaryBg2:   "rgba(13,92,87,0.14)",
 
-  success:      "#15803d",
-  warning:      "#c2410c",
+  // Semantic
+  success:      "#16a34a",
+  successBg:    "rgba(22,163,74,0.09)",
+  successText:  "#15803d",
+  warning:      "#ea580c",
+  warningBg:    "rgba(234,88,12,0.09)",
   error:        "#dc2626",
+  errorBg:      "rgba(220,38,38,0.09)",
+  info:         "#3b82f6",
+  infoBg:       "rgba(59,130,246,0.09)",
 };
 
 export const categoryColors = {
   "Entertainment":    "#e50914",
-  "Productivity":     "#6e40c9",
-  "Health & Fitness": "#10b981",
-  "Education":        "#f59e0b",
-  "Finance":          "#06b6d4",
-  "Shopping":         "#ec4899",
-  "Gaming":           "#8b5cf6",
-  "News & Media":     "#3b82f6",
-  "Cloud Storage":    "#64748b",
-  "Other":            "#475569",
+  "Productivity":     "#7c3aed",
+  "Health & Fitness": "#059669",
+  "Education":        "#d97706",
+  "Finance":          "#0284c7",
+  "Shopping":         "#db2777",
+  "Gaming":           "#7c3aed",
+  "News & Media":     "#2563eb",
+  "Cloud Storage":    "#475569",
+  "Other":            "#64748b",
 };
 
 export const CATEGORIES = [

@@ -1,6 +1,5 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from "react-native";
-import "tailwindcss/tailwind.css";
+import { useState, useRef, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,7 +18,6 @@ export default function AuthScreen({ navigation, route }) {
       emailInputRef.current.focus();
     }
   }, []);
-  const [form, setForm] = useState({ email: "", password: "", fullName: "", confirmPassword: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resetError, setResetError] = useState("");
@@ -40,6 +38,16 @@ export default function AuthScreen({ navigation, route }) {
     setError("");
   };
 
+  const saveSession = async (data) => {
+    if (data?.access_token) {
+      await AsyncStorage.setItem("st_token", data.access_token);
+    }
+    if (data?.user_id) {
+      await AsyncStorage.setItem("st_user_id", data.user_id);
+    }
+    navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
+  };
+
   const handleVerify = async () => {
     if (otp.length < 6) return setError("Enter the 6-digit code.");
     setLoading(true);
@@ -54,61 +62,59 @@ export default function AuthScreen({ navigation, route }) {
     }
   };
 
-  const saveSession = async (_data) => {
-    // InsForge manages the session internally via the SDK.
-    // Just navigate to the Dashboard.
-    navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
-  };
-
   const handleSubmit = async () => {
-    setError("");
     if (mode === "signup") {
-      if (!form.fullName.trim()) return setError("Please enter your name.");
+      if (!form.fullName.trim()) return setError("Full name is required.");
+      if (!form.email.trim()) return setError("Email is required.");
       if (form.password.length < 6) return setError("Password must be at least 6 characters.");
       if (form.password !== form.confirmPassword) return setError("Passwords do not match.");
-    }
-    if (!form.email.includes("@")) return setError("Enter a valid email address.");
-
-    setLoading(true);
-    try {
-      const data =
-        mode === "login"
-          ? await api.login({ email: form.email, password: form.password })
-          : await api.register({ email: form.email, password: form.password, full_name: form.fullName });
-
-      if (data.requireEmailVerification) {
-        setVerifyMode(true);
-      } else {
-        await saveSession(data);
+      setLoading(true);
+      try {
+        const data = await api.register({ email: form.email.trim().toLowerCase(), password: form.password, full_name: form.fullName.trim() });
+        if (data?.requireEmailVerification) {
+          setVerifyMode(true);
+        } else {
+          await saveSession(data);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    } else {
+      if (!form.email.trim()) return setError("Email is required.");
+      if (!form.password) return setError("Password is required.");
+      setLoading(true);
+      try {
+        const data = await api.login({ email: form.email.trim().toLowerCase(), password: form.password });
+        await saveSession(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!resetEmail.trim() || !resetEmail.includes("@")) {
-      return setResetError("Enter a valid email address.");
-    }
+    if (!resetEmail.trim()) return setResetError("Enter your email.");
     setLoading(true);
     setResetError("");
     setResetInfo("");
     try {
       await api.forgotPassword(resetEmail.trim().toLowerCase());
-      setResetInfo("If an account exists, a reset link/token has been sent.");
+      setResetInfo("Check your email for the reset token.");
       setResetStep(2);
     } catch (err) {
-      setResetError(err.message || "Could not send reset email.");
+      setResetError(err.message || "Failed to send reset email.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetPassword = async () => {
-    if (!resetToken.trim()) return setResetError("Paste your reset token.");
-    if (newPassword.length < 6) return setResetError("Password must be at least 6 characters.");
+    if (!resetToken.trim()) return setResetError("Enter the reset token.");
+    if (!newPassword || newPassword.length < 6) return setResetError("Password must be at least 6 characters.");
     setLoading(true);
     setResetError("");
     setResetInfo("");
@@ -123,35 +129,28 @@ export default function AuthScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView className="relative min-h-screen bg-white">
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
       <BrandShapes variant="auth" style={{ position: "absolute", width: "100%", height: "100%" }} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false}>
-        <BrandShapes variant="auth" />
-    <SafeAreaView accessible={true} accessibilityLabel="Authentication screen" className="relative min-h-screen bg-white">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, gap: 24 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+        <LinearGradient colors={["#fff", "#f6f3ea"]} style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, gap: 24 }} keyboardShouldPersistTaps="handled">
             <TouchableOpacity style={s.back} onPress={() => navigation.navigate("Landing")} hitSlop={8}>
               <Text style={s.backText}>Back to Home</Text>
             </TouchableOpacity>
-
             <StaggerReveal style={s.card} delay={80} profile="gentle">
-              <View className="flex flex-row justify-center items-center mb-4">
+              <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", marginBottom: 16 }}>
                 <View style={s.logoBadge}><Text style={s.logoBadgeText}>S</Text></View>
                 <Text style={s.logoText}>SubTrack</Text>
               </View>
-
               {verifyMode ? (
                 <>
                   <Text style={s.title}>Verify your email</Text>
                   <Text style={s.subtitle}>We've sent a 6-digit code to {form.email}. Enter it below to continue.</Text>
-
                   {error ? (
-                    <View className="rounded-lg p-3 border border-red-300 bg-red-100 mb-4">
+                    <View style={s.errorBox}>
                       <Text style={s.errorText}>{error}</Text>
                     </View>
                   ) : null}
-
                   <View style={s.field}>
                     <Text style={s.label}>Verification Code</Text>
                     <TextInput
@@ -164,7 +163,6 @@ export default function AuthScreen({ navigation, route }) {
                       maxLength={6}
                     />
                   </View>
-
                   {loading ? (
                     <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.submitBtnLoading}>
                       <View style={s.submitInner}><ActivityIndicator color="#fff" /></View>
@@ -172,12 +170,11 @@ export default function AuthScreen({ navigation, route }) {
                   ) : (
                     <InteractiveButton label="Verify & Continue" onPress={handleVerify} style={s.submitBtn} />
                   )}
-
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => {
                       setVerifyMode(false);
                       setError("");
-                    }} 
+                    }}
                     style={[s.switchRow, { marginTop: 20 }]}
                   >
                     <Text style={s.switchLink}>Back to Sign Up</Text>
@@ -197,16 +194,13 @@ export default function AuthScreen({ navigation, route }) {
                       </TouchableOpacity>
                     ))}
                   </View>
-
                   <Text style={s.title}>{mode === "login" ? "Welcome back" : "Create your account"}</Text>
                   <Text style={s.subtitle}>{mode === "login" ? "Access your dashboard and renewals." : "Start tracking subscriptions in under one minute."}</Text>
-
                   {error ? (
                     <View style={s.errorBox}>
                       <Text style={s.errorText}>{error}</Text>
                     </View>
                   ) : null}
-
                   {mode === "signup" && (
                     <View style={s.field}>
                       <Text style={s.label}>Full Name</Text>
@@ -220,10 +214,10 @@ export default function AuthScreen({ navigation, route }) {
                       />
                     </View>
                   )}
-
                   <View style={s.field}>
                     <Text style={s.label}>Email</Text>
                     <TextInput
+                      ref={emailInputRef}
                       style={s.input}
                       placeholder="you@example.com"
                       placeholderTextColor={colors.text4}
@@ -234,7 +228,6 @@ export default function AuthScreen({ navigation, route }) {
                       autoComplete="email"
                     />
                   </View>
-
                   <View style={s.field}>
                     <Text style={s.label}>Password</Text>
                     <View style={s.passWrap}>
@@ -252,7 +245,6 @@ export default function AuthScreen({ navigation, route }) {
                       </TouchableOpacity>
                     </View>
                   </View>
-
                   {mode === "login" && (
                     <TouchableOpacity onPress={() => {
                       setResetMode(true);
@@ -266,7 +258,6 @@ export default function AuthScreen({ navigation, route }) {
                       <Text style={s.forgotText}>Forgot password?</Text>
                     </TouchableOpacity>
                   )}
-
                   {mode === "signup" && (
                     <View style={s.field}>
                       <Text style={s.label}>Confirm Password</Text>
@@ -281,7 +272,6 @@ export default function AuthScreen({ navigation, route }) {
                       />
                     </View>
                   )}
-
                   {loading ? (
                     <LinearGradient colors={["#7ea8a5", "#7ea8a5"]} style={s.submitBtnLoading}>
                       <View style={s.submitInner}><ActivityIndicator color="#fff" /></View>
@@ -289,7 +279,6 @@ export default function AuthScreen({ navigation, route }) {
                   ) : (
                     <InteractiveButton label={mode === "login" ? "Continue" : "Create Account"} onPress={handleSubmit} style={s.submitBtn} />
                   )}
-
                   <View style={s.switchRow}>
                     <Text style={s.switchText}>{mode === "login" ? "No account yet?" : "Already have an account?"}</Text>
                     <TouchableOpacity onPress={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} hitSlop={8}>
@@ -300,9 +289,8 @@ export default function AuthScreen({ navigation, route }) {
               )}
             </StaggerReveal>
           </ScrollView>
-        </KeyboardAvoidingView>
-      </LinearGradient>
-
+        </LinearGradient>
+      </KeyboardAvoidingView>
       <Modal visible={resetMode} animationType="slide" transparent>
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
@@ -317,7 +305,6 @@ export default function AuthScreen({ navigation, route }) {
                 <Text style={s.infoText}>{resetInfo}</Text>
               </View>
             ) : null}
-
             {resetDone ? (
               <>
                 <Text style={s.modalSub}>You can now sign in with your new password.</Text>
@@ -391,7 +378,6 @@ export default function AuthScreen({ navigation, route }) {
                 </LinearGradient>
               </>
             )}
-
             {!resetDone && (
               <TouchableOpacity style={s.cancelWrap} onPress={() => {
                 setResetMode(false);
@@ -408,4 +394,45 @@ export default function AuthScreen({ navigation, route }) {
   );
 }
 
-// Removed StyleSheet styles in favor of Tailwind utility classes
+const s = StyleSheet.create({
+  back: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.64)" },
+  backText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 12 },
+  card: { backgroundColor: "#fff", borderRadius: 22, padding: 24, borderWidth: 1, borderColor: "#e2e8f0" },
+  logoBadge: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginRight: 8 },
+  logoBadgeText: { fontFamily: "Poppins_800ExtraBold", color: "#fff", fontSize: 17 },
+  logoText: { fontFamily: "Poppins_800ExtraBold", fontSize: 20, color: colors.text },
+  title: { fontFamily: "Poppins_800ExtraBold", fontSize: 26, color: colors.text, marginBottom: 6 },
+  subtitle: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  tabs: { flexDirection: "row", borderRadius: 14, borderWidth: 1, borderColor: "#e2e8f0", backgroundColor: "#f8fafc", padding: 4, gap: 4, marginBottom: 20 },
+  tabBtn: { flex: 1 },
+  tabSurface: { borderRadius: 10, paddingVertical: 9, alignItems: "center" },
+  tabInactive: {},
+  tabText: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 13 },
+  tabTextActive: { color: "#fff" },
+  field: { marginBottom: 14 },
+  label: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 13, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 12, backgroundColor: "#f8fafc", paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Inter_400Regular", color: colors.text, fontSize: 15 },
+  passWrap: { flexDirection: "row", alignItems: "center" },
+  eyeBtn: { position: "absolute", right: 14 },
+  eyeText: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 13 },
+  forgotWrap: { alignSelf: "flex-end", marginBottom: 14 },
+  forgotText: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 13 },
+  errorBox: { borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#fca5a5", backgroundColor: "#fee2e2", marginBottom: 14 },
+  errorText: { fontFamily: "Inter_500Medium", color: "#dc2626", fontSize: 13 },
+  infoBox: { borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#86efac", backgroundColor: "#dcfce7", marginBottom: 14 },
+  infoText: { fontFamily: "Inter_500Medium", color: "#16a34a", fontSize: 13 },
+  submitBtn: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
+  submitBtnLoading: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
+  submitInner: { paddingVertical: 14, alignItems: "center" },
+  submitText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 15 },
+  switchRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 18 },
+  switchText: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 13 },
+  switchLink: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 13 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 },
+  modalCard: { backgroundColor: "#fff", borderRadius: 22, padding: 24 },
+  modalTitle: { fontFamily: "Poppins_800ExtraBold", fontSize: 22, color: colors.text, marginBottom: 12 },
+  modalSub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 14 },
+  outlineBtn: { borderRadius: 14, borderWidth: 1.5, borderColor: colors.primary, paddingVertical: 13, alignItems: "center", marginTop: 4 },
+  outlineBtnText: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 14 },
+  cancelWrap: { alignItems: "center", marginTop: 16 },
+});

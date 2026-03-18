@@ -7,69 +7,68 @@ import { api, insforge } from "../api";
 import SubCard from "../components/SubCard";
 import SubModal from "../components/SubModal";
 import AnalyticsPanel from "../components/AnalyticsPanel";
-import { syncRenewalReminders } from "../notifications";
 import StaggerReveal from "../components/StaggerReveal";
-import InteractiveButton from "../components/InteractiveButton";
-import BrandShapes from "../components/BrandShapes";
-import "tailwindcss/tailwind.css";
 
 const FREE_LIMIT = 10;
 
 export default function DashboardScreen({ navigation }) {
-  const [subs, setSubs] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
+  const [subs, setSubs]                       = useState([]);
+  const [analytics, setAnalytics]             = useState(null);
   const [actionCenterItems, setActionCenterItems] = useState([]);
-  const [priceAlerts, setPriceAlerts] = useState([]);
-  const [userInfo, setUserInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [actionLoadingMap, setActionLoadingMap] = useState({});
+  const [priceAlerts, setPriceAlerts]         = useState([]);
+  const [userInfo, setUserInfo]               = useState(null);
+  const [loading, setLoading]                 = useState(true);
+  const [refreshing, setRefreshing]           = useState(false);
+  const [actionLoadingMap, setActionLoadingMap]   = useState({});
   const [amountAlertLoadingMap, setAmountAlertLoadingMap] = useState({});
   const [priceAlertsLoading, setPriceAlertsLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editSub, setEditSub] = useState(null);
-  const [activeTab, setActiveTab] = useState("all");
-  const [filterCat, setFilterCat] = useState("All");
-  const [showAnalytics, setShowAnalytics] = useState(true);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [modalVisible, setModalVisible]       = useState(false);
+  const [editSub, setEditSub]                 = useState(null);
+  const [activeTab, setActiveTab]             = useState("all");
+  const [filterCat, setFilterCat]             = useState("All");
+  const [showAnalytics, setShowAnalytics]     = useState(true);
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [subsData, analyticsData, meData] = await Promise.all([
+      const [subsData, analyticsData, meData, actionData] = await Promise.all([
         api.listSubs(),
         api.analytics(),
         api.me(),
-          <SafeAreaView className="relative min-h-screen bg-white">
-            <BrandShapes variant="dashboard" style={{ position: "absolute", width: "100%", height: "100%" }} />
-            <ScrollView className="flex flex-col gap-6 px-4 py-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchAll(true)} />}>
-              <StaggerReveal delay={50} profile="snappy">
-                <Text className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Dashboard</Text>
-              </StaggerReveal>
-              <StaggerReveal delay={80} profile="gentle">
-                <Text className="text-2xl font-bold text-gray-900">Your Subscriptions</Text>
-                <Text className="text-base text-gray-500">Track, manage, and analyze your recurring spend.</Text>
-              </StaggerReveal>
-              {/* ...existing code... */}
-            </ScrollView>
-          </SafeAreaView>
-        setActionCenterItems([]);
-      }
-
-      // Removed StyleSheet styles in favor of Tailwind utility classes
+        api.actionCenterRisk(30),
+      ]);
+      setSubs(Array.isArray(subsData) ? subsData : subsData?.items || []);
+      setAnalytics(analyticsData);
+      setUserInfo(meData);
+      const now = Date.now();
+      const enriched = (Array.isArray(actionData) ? actionData : actionData?.items || []).map((sub) => {
+        const due = new Date(sub.next_billing_date);
+        const due_in_days = Math.max(0, Math.ceil((due.getTime() - now) / (1000 * 60 * 60 * 24)));
+        const reasons = [];
+        if (due_in_days <= 7) reasons.push("due_within_7_days");
+        else if (due_in_days <= 30) reasons.push("due_within_30_days");
+        if (sub.usage_rating && sub.usage_rating <= 2) reasons.push("low_usage");
+        return { ...sub, due_in_days, reasons };
+      });
+      setActionCenterItems(enriched);
+    } catch {
+      setSubs([]);
+      setAnalytics(null);
+      setUserInfo(null);
+      setActionCenterItems([]);
+    } finally {
       setRefreshing(false);
+      setLoading(false);
     }
   }, [navigation]);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const fetchPriceAlerts = useCallback(async (showLoading = true) => {
     if (showLoading) setPriceAlertsLoading(true);
     try {
       const data = await api.priceAnomalies();
-      setPriceAlerts(data?.items || []);
+      setPriceAlerts(Array.isArray(data) ? data : data?.items || []);
     } catch {
       setPriceAlerts([]);
     } finally {
@@ -77,9 +76,7 @@ export default function DashboardScreen({ navigation }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchPriceAlerts();
-  }, [fetchPriceAlerts]);
+  useEffect(() => { fetchPriceAlerts(); }, [fetchPriceAlerts]);
 
   const handleLogout = async () => {
     await insforge.auth.signOut();
@@ -87,30 +84,20 @@ export default function DashboardScreen({ navigation }) {
   };
 
   const handleDelete = (id) => {
-    Alert.alert("Delete Subscription", "Are you sure you want to delete this subscription?", [
+    Alert.alert("Delete subscription", "This action cannot be undone.", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await api.deleteSub(id);
-          fetchAll();
-        },
-      },
+      { text: "Delete", style: "destructive", onPress: async () => { await api.deleteSub(id); fetchAll(); } },
     ]);
   };
 
-  const handleEdit = (sub) => {
-    setEditSub(sub);
-    setModalVisible(true);
-  };
+  const handleEdit  = (sub) => { setEditSub(sub); setModalVisible(true); };
 
   const handleAdd = () => {
     const activeCount = subs.filter((s) => s.is_active).length;
     const isPro = userInfo?.plan !== "free";
     if (!isPro && activeCount >= FREE_LIMIT) {
-      Alert.alert("Free Plan Limit", `Free plan supports up to ${FREE_LIMIT} active subscriptions.`, [
-        { text: "Maybe Later", style: "cancel" },
+      Alert.alert("Free Plan Limit", `You've reached ${FREE_LIMIT} active subscriptions.`, [
+        { text: "Later", style: "cancel" },
         { text: "See Pricing", onPress: () => navigation.navigate("Pricing") },
       ]);
       return;
@@ -119,94 +106,62 @@ export default function DashboardScreen({ navigation }) {
     setModalVisible(true);
   };
 
-  const handleSaved = () => {
-    setModalVisible(false);
-    setEditSub(null);
-    fetchAll();
-    fetchPriceAlerts(false);
-  };
+  const handleSaved = () => { setModalVisible(false); setEditSub(null); fetchAll(); fetchPriceAlerts(false); };
 
-  const reasonLabel = (reason) => {
-    if (reason === "low_usage") return "Low usage";
-    if (reason === "due_within_7_days") return "Due in 7 days";
-    if (reason === "due_within_30_days") return "Due in 30 days";
-    return reason;
-  };
+  const reasonLabel = (r) => ({
+    low_usage:          "Low usage",
+    due_within_7_days:  "Due in 7 days",
+    due_within_30_days: "Due in 30 days",
+  }[r] || r);
 
   const handleActionOutcome = async (id, outcome) => {
-    setActionLoadingMap((prev) => ({ ...prev, [id]: true }));
+    setActionLoadingMap(p => ({ ...p, [id]: true }));
     try {
       await api.setCancellationOutcome(id, outcome);
       await fetchAll(true);
     } catch (e) {
-      Alert.alert("Action failed", e.message || "Could not update cancellation outcome.");
+      Alert.alert("Action failed", e.message || "Could not update outcome.");
     } finally {
-      setActionLoadingMap((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      setActionLoadingMap(p => { const n = { ...p }; delete n[id]; return n; });
     }
   };
 
-  const confirmCancelledOutcome = (id) => {
-    Alert.alert("Mark as Cancelled", "Are you sure you want to mark this subscription as cancelled?", [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Mark Cancelled",
-        style: "destructive",
-        onPress: () => handleActionOutcome(id, "cancelled"),
-      },
-    ]);
-  };
+  const confirmCancelled = (id) => Alert.alert("Mark as Cancelled", "Confirm cancellation?", [
+    { text: "Keep", style: "cancel" },
+    { text: "Mark Cancelled", style: "destructive", onPress: () => handleActionOutcome(id, "cancelled") },
+  ]);
 
   const handleDismissAmountAlert = async (id) => {
-    setAmountAlertLoadingMap((prev) => ({ ...prev, [id]: true }));
+    setAmountAlertLoadingMap(p => ({ ...p, [id]: true }));
     try {
       await api.dismissAmountAlert(id);
       await fetchPriceAlerts(false);
     } catch (e) {
-      Alert.alert("Action failed", e.message || "Could not dismiss price alert.");
+      Alert.alert("Action failed", e.message || "Could not dismiss alert.");
     } finally {
-      setAmountAlertLoadingMap((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      setAmountAlertLoadingMap(p => { const n = { ...p }; delete n[id]; return n; });
     }
   };
 
-  const formatAmount = (value, currency = "USD") => {
-    const numeric = Number(value || 0);
+  const fmt = (value, currency = "USD") => {
     try {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(numeric);
+      return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(Number(value || 0));
     } catch {
-      return `${currency} ${numeric.toFixed(2)}`;
+      return `${currency} ${Number(value || 0).toFixed(2)}`;
     }
   };
 
-  const formatChangePct = (value) => {
-    const numeric = Number(value || 0);
-    const prefix = numeric > 0 ? "+" : "";
-    return `${prefix}${numeric.toFixed(1)}%`;
+  const fmtPct = (v) => { const n = Number(v || 0); return `${n > 0 ? "+" : ""}${n.toFixed(1)}%`; };
+
+  const fmtChangedAt = (ts) => {
+    if (!ts) return "Updated recently";
+    const dt = new Date(ts);
+    if (isNaN(dt)) return "Updated recently";
+    const daysAgo = Math.max(0, Math.floor((Date.now() - dt) / 86400000));
+    return `${dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · ${daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`}`;
   };
 
-  const formatChangedMeta = (changedAt) => {
-    if (!changedAt) return "Updated recently";
-    const dt = new Date(changedAt);
-    if (Number.isNaN(dt.getTime())) return "Updated recently";
-
-    const daysAgo = Math.max(0, Math.floor((Date.now() - dt.getTime()) / (1000 * 60 * 60 * 24)));
-    const agoLabel = daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`;
-    const dateLabel = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${dateLabel} • ${agoLabel}`;
-  };
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchAll(true);
-    fetchPriceAlerts(false);
-  };
+  const handleRefresh = () => { setRefreshing(true); fetchAll(true); fetchPriceAlerts(false); };
 
   const filteredSubs = subs.filter((s) => {
     if (activeTab === "active" && !s.is_active) return false;
@@ -215,27 +170,38 @@ export default function DashboardScreen({ navigation }) {
     return true;
   });
 
-  const isPro = userInfo?.plan !== "free";
+  const isPro       = userInfo?.plan !== "free";
   const activeCount = subs.filter((s) => s.is_active).length;
-  const atLimit = !isPro && activeCount >= FREE_LIMIT;
+  const atLimit     = !isPro && activeCount >= FREE_LIMIT;
+
+  const initials = userInfo?.full_name
+    ? userInfo.full_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
+    : (userInfo?.email?.[0] || "U").toUpperCase();
 
   return (
     <SafeAreaView style={s.safe}>
+      {/* Top chrome */}
       <View style={s.topChrome}>
-        <View>
+        <View style={s.brandRow}>
+          <View style={s.logoWrap}>
+            <LinearGradient colors={[colors.primary, colors.primaryLight]} style={s.logoDot} />
+          </View>
           <Text style={s.brand}>SubTrack</Text>
-          <Text style={s.welcome}>{userInfo?.full_name || userInfo?.email || "Your subscription workspace"}</Text>
         </View>
         <View style={s.topActions}>
           {!isPro && (
             <TouchableOpacity onPress={() => navigation.navigate("Pricing")} hitSlop={8}>
-              <LinearGradient colors={[colors.primary, "#1f7a73"]} style={s.upgradeBtn}>
-                <Text style={s.upgradeBtnText}>Go Pro</Text>
+              <LinearGradient colors={[colors.primary, colors.primaryLight]} style={s.proBadge}>
+                <Text style={s.proBadgeText}>✦ Go Pro</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={() => navigation.navigate("Settings")} style={s.iconBtn} hitSlop={8}><Text style={s.iconTxt}>⚙</Text></TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} style={s.iconBtn} hitSlop={8}><Text style={s.iconTxt}>↩</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("Settings")} style={s.iconBtn} hitSlop={8}>
+            <Text style={s.iconTxt}>⚙</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={[s.iconBtn, s.avatarBtn]} hitSlop={8}>
+            <Text style={s.avatarTxt}>{initials}</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -246,136 +212,142 @@ export default function DashboardScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
       >
-        <StaggerReveal delay={70} profile="snappy">
-          <LinearGradient colors={["#fff8eb", "#f6f3ea"]} style={s.heroCard}>
-          <BrandShapes variant="dashboard" style={s.heroShapes} />
-          <View style={s.heroRow}>
-            <View>
-              <Text style={s.heroTitle}>My subscriptions</Text>
-              <Text style={s.heroSub}>{activeCount} active{!isPro ? ` • ${FREE_LIMIT} max on free` : " • Unlimited on Pro"}</Text>
+        {/* Hero */}
+        <StaggerReveal delay={60} profile="snappy">
+          <LinearGradient colors={["#0d5c57", "#0a4844"]} style={s.heroCard}>
+            <View style={s.heroContent}>
+              <View>
+                <Text style={s.heroGreet}>Hello{userInfo?.full_name ? `, ${userInfo.full_name.split(" ")[0]}` : ""} 👋</Text>
+                <Text style={s.heroTitle}>{activeCount} active subscription{activeCount !== 1 ? "s" : ""}</Text>
+                <Text style={s.heroSub}>{isPro ? "Pro plan · Unlimited tracking" : `Free plan · ${FREE_LIMIT - activeCount} slot${FREE_LIMIT - activeCount !== 1 ? "s" : ""} left`}</Text>
+              </View>
+              <View style={s.heroActions}>
+                <TouchableOpacity onPress={() => setShowAnalytics(v => !v)} style={[s.toggleBtn, showAnalytics && s.toggleBtnActive]}>
+                  <Text style={[s.toggleBtnText, showAnalytics && s.toggleBtnTextActive]}>Insights</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleAdd} style={s.addBtn}>
+                  <Text style={s.addBtnText}>+ Add</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={s.heroActions}>
-              <TouchableOpacity onPress={() => setShowAnalytics((v) => !v)} style={[s.toggleBtn, showAnalytics && s.toggleBtnActive]} hitSlop={8}>
-                <Text style={[s.toggleBtnText, showAnalytics && s.toggleBtnTextActive]}>Insights</Text>
-              </TouchableOpacity>
-              <InteractiveButton label="+ Add" onPress={handleAdd} style={s.addWrap} textStyle={s.addTxt} />
-            </View>
-          </View>
 
-          {atLimit && (
-            <View style={s.limitBanner}>
-              <Text style={s.limitTxt}>Free limit reached. Upgrade for unlimited tracking.</Text>
-              <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.limitCta} hitSlop={8}><Text style={s.limitCtaTxt}>Upgrade</Text></TouchableOpacity>
-            </View>
-          )}
+            {atLimit && (
+              <View style={s.limitBanner}>
+                <Text style={s.limitTxt}>Free limit reached — upgrade for unlimited tracking.</Text>
+                <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.limitCta} hitSlop={8}>
+                  <Text style={s.limitCtaTxt}>Upgrade →</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-          <View style={s.reminderBanner}>
-            <Text style={s.reminderText}>
-              {Platform.OS === "web"
-                ? "Web reminder fallback: renewals are tracked in-app on this dashboard. Use mobile for device-level local alerts."
-                : notificationsEnabled
-                ? "Local reminder notifications are enabled on this device."
-                : "Turn on reminders in Settings to schedule local alerts on this device."}
-            </Text>
-          </View>
+            {Platform.OS === "web" && (
+              <View style={s.reminderBanner}>
+                <Text style={s.reminderText}>📱 Use the mobile app for device-level renewal reminders.</Text>
+              </View>
+            )}
           </LinearGradient>
         </StaggerReveal>
 
+        {/* Analytics */}
         {showAnalytics && (
-          <StaggerReveal style={s.analyticsWrap} delay={130} profile="smooth">
+          <StaggerReveal style={s.analyticsWrap} delay={110} profile="smooth">
             <AnalyticsPanel analytics={analytics} />
           </StaggerReveal>
         )}
 
-        <View style={s.actionCenterWrap}>
-          <View style={s.actionCenterHead}>
-            <Text style={s.actionCenterTitle}>Action Center</Text>
-            <Text style={s.actionCenterMeta}>{actionCenterItems.length} at-risk renewals</Text>
-          </View>
-          {actionCenterItems.length === 0 ? (
-            <Text style={s.actionCenterEmpty}>No at-risk renewals in the next 30 days.</Text>
-          ) : (
-            actionCenterItems.map((item) => {
+        {/* Action Center */}
+        {actionCenterItems.length > 0 && (
+          <View style={s.sectionWrap}>
+            <View style={s.sectionHead}>
+              <View style={s.sectionHeadLeft}>
+                <View style={[s.sectionDot, { backgroundColor: colors.warning }]} />
+                <Text style={s.sectionTitle}>Action Center</Text>
+              </View>
+              <View style={s.countPill}>
+                <Text style={s.countPillText}>{actionCenterItems.length}</Text>
+              </View>
+            </View>
+            {actionCenterItems.map((item) => {
               const isBusy = !!actionLoadingMap[item.id];
               return (
                 <View key={item.id} style={s.actionRow}>
                   <View style={s.actionRowTop}>
                     <Text style={s.actionName}>{item.name}</Text>
-                    <Text style={s.actionDue}>Due in {item.due_in_days}d</Text>
+                    <View style={[s.duePill, item.due_in_days <= 7 ? s.duePillUrgent : s.duePillNormal]}>
+                      <Text style={[s.duePillText, item.due_in_days <= 7 ? { color: colors.warning } : { color: colors.text3 }]}>
+                        {item.due_in_days}d left
+                      </Text>
+                    </View>
                   </View>
                   <View style={s.tagRow}>
-                    {(item.reasons || []).map((reason) => (
-                      <View key={`${item.id}-${reason}`} style={s.tagChip}>
-                        <Text style={s.tagText}>{reasonLabel(reason)}</Text>
-                      </View>
+                    {(item.reasons || []).map((r) => (
+                      <View key={r} style={s.tagChip}><Text style={s.tagText}>{reasonLabel(r)}</Text></View>
                     ))}
                   </View>
-                  <View style={s.actionButtons}>
-                    <TouchableOpacity
-                      onPress={() => handleActionOutcome(item.id, "kept")}
-                      disabled={isBusy}
-                      style={[s.outcomeBtn, isBusy && s.outcomeBtnDisabled]}
-                    >
-                      <Text style={s.outcomeBtnText}>Keep</Text>
+                  <View style={s.actionBtns}>
+                    <TouchableOpacity onPress={() => handleActionOutcome(item.id, "kept")} disabled={isBusy} style={[s.outBtn, isBusy && s.outBtnDisabled]}>
+                      <Text style={s.outBtnText}>Keep</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => confirmCancelledOutcome(item.id)}
-                      disabled={isBusy}
-                      style={[s.outcomeBtn, s.outcomeBtnDanger, isBusy && s.outcomeBtnDisabled]}
-                    >
-                      <Text style={[s.outcomeBtnText, s.outcomeBtnDangerText]}>Cancelled</Text>
+                    <TouchableOpacity onPress={() => confirmCancelled(item.id)} disabled={isBusy} style={[s.outBtn, s.outBtnDanger, isBusy && s.outBtnDisabled]}>
+                      <Text style={[s.outBtnText, { color: colors.error }]}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               );
-            })
-          )}
-        </View>
-
-        <View style={s.priceAlertWrap}>
-          <View style={s.actionCenterHead}>
-            <Text style={s.actionCenterTitle}>Price Alerts</Text>
-            <Text style={s.actionCenterMeta}>{priceAlerts.length} flagged changes</Text>
+            })}
           </View>
-          {priceAlertsLoading ? (
-            <View style={s.priceAlertLoading}><ActivityIndicator color={colors.primary} size="small" /></View>
-          ) : priceAlerts.length === 0 ? (
-            <Text style={s.actionCenterEmpty}>No recent amount anomalies above threshold.</Text>
-          ) : (
-            priceAlerts.map((item) => {
-              const isBusy = !!amountAlertLoadingMap[item.id];
-              return (
-                <View key={`price-${item.id}`} style={s.priceAlertRow}>
-                  <View style={s.actionRowTop}>
-                    <Text style={s.actionName}>{item.name}</Text>
-                    <Text style={[s.priceDelta, Number(item.change_pct || 0) < 0 ? s.priceDeltaDown : s.priceDeltaUp]}>{formatChangePct(item.change_pct)}</Text>
-                  </View>
-                  <Text style={s.priceAlertAmounts}>
-                    {formatAmount(item.previous_amount, item.currency)} → {formatAmount(item.current_amount, item.currency)}
-                  </Text>
-                  <View style={s.priceAlertFooter}>
-                    <Text style={s.priceAlertMeta}>{formatChangedMeta(item.changed_at)}</Text>
-                    <TouchableOpacity
-                      onPress={() => handleDismissAmountAlert(item.id)}
-                      disabled={isBusy}
-                      style={[s.outcomeBtn, isBusy && s.outcomeBtnDisabled]}
-                    >
-                      <Text style={s.outcomeBtnText}>Dismiss</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
+        )}
 
+        {/* Price Alerts */}
+        {(priceAlerts.length > 0 || priceAlertsLoading) && (
+          <View style={s.sectionWrap}>
+            <View style={s.sectionHead}>
+              <View style={s.sectionHeadLeft}>
+                <View style={[s.sectionDot, { backgroundColor: colors.info }]} />
+                <Text style={s.sectionTitle}>Price Alerts</Text>
+              </View>
+              {!priceAlertsLoading && (
+                <View style={[s.countPill, { backgroundColor: colors.infoBg }]}>
+                  <Text style={[s.countPillText, { color: colors.info }]}>{priceAlerts.length}</Text>
+                </View>
+              )}
+            </View>
+            {priceAlertsLoading ? (
+              <ActivityIndicator color={colors.primary} size="small" style={{ paddingVertical: 12 }} />
+            ) : (
+              priceAlerts.map((item) => {
+                const isBusy = !!amountAlertLoadingMap[item.id];
+                const pct = Number(item.amount_change_pct || 0);
+                return (
+                  <View key={item.id} style={s.priceRow}>
+                    <View style={s.actionRowTop}>
+                      <Text style={s.actionName}>{item.name}</Text>
+                      <View style={[s.pctPill, pct >= 0 ? s.pctPillUp : s.pctPillDown]}>
+                        <Text style={[s.pctText, { color: pct >= 0 ? colors.warning : colors.success }]}>{fmtPct(pct)}</Text>
+                      </View>
+                    </View>
+                    <Text style={s.priceAmounts}>{fmt(item.last_amount, item.currency)} → {fmt(item.amount, item.currency)}</Text>
+                    <View style={s.priceFooter}>
+                      <Text style={s.priceMeta}>{fmtChangedAt(item.amount_changed_at)}</Text>
+                      <TouchableOpacity onPress={() => handleDismissAmountAlert(item.id)} disabled={isBusy} style={[s.outBtn, isBusy && s.outBtnDisabled]}>
+                        <Text style={s.outBtnText}>Dismiss</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        {/* Filters */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filters} contentContainerStyle={s.filtersInner}>
           {["all", "active", "inactive"].map((tab) => (
             <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[s.chip, activeTab === tab && s.chipActive]}>
               <Text style={[s.chipText, activeTab === tab && s.chipTextActive]}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</Text>
             </TouchableOpacity>
           ))}
-          <View style={s.divider} />
+          <View style={s.filterDivider} />
           {["All", ...CATEGORIES].map((cat) => (
             <TouchableOpacity key={cat} onPress={() => setFilterCat(cat)} style={[s.chip, filterCat === cat && s.chipActive]}>
               <Text style={[s.chipText, filterCat === cat && s.chipTextActive]}>{cat}</Text>
@@ -383,20 +355,28 @@ export default function DashboardScreen({ navigation }) {
           ))}
         </ScrollView>
 
+        {/* Subscription list */}
         {loading ? (
           <View style={s.center}><ActivityIndicator color={colors.primary} size="large" /></View>
         ) : filteredSubs.length === 0 ? (
-          <StaggerReveal style={s.empty} delay={190} profile="smooth">
-            <Text style={s.emptyTitle}>{subs.length === 0 ? "No subscriptions yet" : "No matches"}</Text>
-            <Text style={s.emptySub}>{subs.length === 0 ? "Add your first subscription to start tracking." : "Try a different filter."}</Text>
-            {subs.length === 0 && (
-              <TouchableOpacity onPress={handleAdd} hitSlop={8}>
-                <LinearGradient colors={[colors.primary, "#1f7a73"]} style={s.emptyBtn}><Text style={s.emptyBtnText}>Add First Subscription</Text></LinearGradient>
-              </TouchableOpacity>
-            )}
+          <StaggerReveal style={s.emptyWrap} delay={170} profile="smooth">
+            <View style={s.emptyCard}>
+              <Text style={s.emptyEmoji}>{subs.length === 0 ? "📦" : "🔍"}</Text>
+              <Text style={s.emptyTitle}>{subs.length === 0 ? "No subscriptions yet" : "No matches"}</Text>
+              <Text style={s.emptySub}>{subs.length === 0 ? "Add your first subscription to start tracking spending." : "Try a different filter or tab."}</Text>
+              {subs.length === 0 && (
+                <TouchableOpacity onPress={handleAdd} style={s.emptyBtn}>
+                  <LinearGradient colors={[colors.primary, colors.primaryLight]} style={s.emptyBtnGradient}>
+                    <Text style={s.emptyBtnText}>+ Add First Subscription</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
+            </View>
           </StaggerReveal>
         ) : (
-          <StaggerReveal style={s.list} delay={190} profile="smooth">{filteredSubs.map((sub) => <SubCard key={sub.id} sub={sub} onEdit={handleEdit} onDelete={handleDelete} />)}</StaggerReveal>
+          <StaggerReveal style={s.list} delay={170} profile="smooth">
+            {filteredSubs.map((sub) => <SubCard key={sub.id} sub={sub} onEdit={handleEdit} onDelete={handleDelete} />)}
+          </StaggerReveal>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -405,156 +385,147 @@ export default function DashboardScreen({ navigation }) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+
   topChrome: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: colors.bg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border2,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1, borderBottomColor: colors.border2,
+    shadowColor: "#0f172a", shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
   },
-  brand: { fontFamily: "Poppins_800ExtraBold", fontSize: 24, color: colors.text },
-  welcome: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3, marginTop: 2, maxWidth: 190 },
+  brandRow:  { flexDirection: "row", alignItems: "center", gap: 8 },
+  logoWrap:  {},
+  logoDot:   { width: 8, height: 8, borderRadius: 4 },
+  brand:     { fontFamily: "Poppins_800ExtraBold", fontSize: 22, color: colors.text, letterSpacing: -0.5 },
+
   topActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  upgradeBtn: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9 },
-  upgradeBtnText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 12 },
-  iconBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 10, width: 36, height: 36, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.6)" },
-  iconTxt: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 15 },
+  proBadge:   { borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8 },
+  proBadgeText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 12 },
+  iconBtn:    {
+    borderWidth: 1, borderColor: colors.border2, borderRadius: 10,
+    width: 36, height: 36, alignItems: "center", justifyContent: "center",
+    backgroundColor: colors.bg3,
+  },
+  iconTxt:   { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 15 },
+  avatarBtn: { backgroundColor: colors.primaryBg2, borderColor: colors.primary + "30" },
+  avatarTxt: { fontFamily: "Inter_800ExtraBold", color: colors.primary, fontSize: 13 },
 
   scroll: { flex: 1 },
-  heroCard: { margin: 20, marginBottom: 12, borderRadius: 22, padding: 18, borderWidth: 1, borderColor: colors.border2, overflow: "hidden" },
-  heroShapes: { opacity: 0.65 },
-  heroRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  heroTitle: { fontFamily: "Poppins_800ExtraBold", fontSize: 27, color: colors.text },
-  heroSub: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3, marginTop: 4 },
-  heroActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  toggleBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.67)" },
-  toggleBtnActive: { borderColor: colors.primary, backgroundColor: "rgba(18,94,89,0.10)" },
-  toggleBtnText: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12 },
-  toggleBtnTextActive: { color: colors.primary },
-  addWrap: { minWidth: 86 },
-  addTxt: { fontSize: 13 },
+
+  heroCard: { margin: 16, borderRadius: 20, padding: 20, overflow: "hidden" },
+  heroContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  heroGreet: { fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.65)", fontSize: 13, marginBottom: 4 },
+  heroTitle: { fontFamily: "Poppins_800ExtraBold", fontSize: 26, color: "#fff", lineHeight: 30, letterSpacing: -0.5 },
+  heroSub:   { fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 6 },
+  heroActions: { gap: 8, alignItems: "flex-end" },
+  toggleBtn: {
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  toggleBtnActive:     { borderColor: "rgba(255,255,255,0.5)", backgroundColor: "rgba(255,255,255,0.18)" },
+  toggleBtnText:       { fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.65)", fontSize: 12 },
+  toggleBtnTextActive: { color: "#fff" },
+  addBtn: {
+    borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.15)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)",
+  },
+  addBtnText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 13 },
 
   limitBanner: {
-    marginTop: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(194,65,12,0.23)",
-    backgroundColor: "rgba(194,65,12,0.08)",
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    marginTop: 16, borderRadius: 12, padding: 12,
+    backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: "rgba(255,255,255,0.18)",
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8,
   },
-  limitTxt: { fontFamily: "Inter_500Medium", color: colors.warning, fontSize: 12, flex: 1 },
-  limitCta: { borderRadius: 8, backgroundColor: colors.warning, paddingHorizontal: 10, paddingVertical: 8 },
+  limitTxt:  { fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.85)", fontSize: 12, flex: 1 },
+  limitCta:  { borderRadius: 8, backgroundColor: "rgba(255,255,255,0.18)", paddingHorizontal: 10, paddingVertical: 7 },
   limitCtaTxt: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 12 },
+
   reminderBanner: {
-    marginTop: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(18,94,89,0.18)",
-    backgroundColor: "rgba(18,94,89,0.08)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    marginTop: 10, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.07)",
   },
-  reminderText: { fontFamily: "Inter_500Medium", color: colors.text2, fontSize: 12, lineHeight: 17 },
+  reminderText: { fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)", fontSize: 12 },
 
-  analyticsWrap: { paddingHorizontal: 20, marginBottom: 6 },
+  analyticsWrap: { paddingHorizontal: 16, marginBottom: 4 },
 
-  actionCenterWrap: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border2,
-    backgroundColor: colors.card,
-    padding: 12,
+  sectionWrap: {
+    marginHorizontal: 16, marginBottom: 10,
+    borderRadius: 16, borderWidth: 1, borderColor: colors.border2,
+    backgroundColor: colors.card, padding: 14,
+    shadowColor: "#0f172a", shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
-  actionCenterHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  actionCenterTitle: { fontFamily: "Inter_700Bold", color: colors.text, fontSize: 14 },
-  actionCenterMeta: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 11 },
-  actionCenterEmpty: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 12, lineHeight: 17 },
+  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  sectionHeadLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionDot:  { width: 8, height: 8, borderRadius: 4 },
+  sectionTitle:{ fontFamily: "Inter_700Bold", color: colors.text, fontSize: 14 },
+  countPill:   {
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3,
+    backgroundColor: colors.warningBg,
+  },
+  countPillText: { fontFamily: "Inter_700Bold", color: colors.warning, fontSize: 11 },
+
   actionRow: {
-    borderWidth: 1,
-    borderColor: colors.border2,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.74)",
-    padding: 10,
-    marginTop: 8,
+    borderWidth: 1, borderColor: colors.border2, borderRadius: 12,
+    backgroundColor: colors.bg, padding: 12, marginTop: 8,
   },
-  actionRowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  actionName: { flex: 1, fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 13 },
-  actionDue: { fontFamily: "Inter_600SemiBold", color: colors.warning, fontSize: 11 },
-  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  tagChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(18,94,89,0.20)",
-    backgroundColor: "rgba(18,94,89,0.08)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  actionRowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  actionName:  { flex: 1, fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 14 },
+  duePill:     { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  duePillUrgent: { backgroundColor: colors.warningBg },
+  duePillNormal: { backgroundColor: colors.bg3 },
+  duePillText: { fontFamily: "Inter_700Bold", fontSize: 11 },
+  tagRow:      { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  tagChip:     {
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: colors.primaryBg, borderWidth: 1, borderColor: colors.border,
   },
-  tagText: { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 10 },
-  actionButtons: { flexDirection: "row", gap: 8, marginTop: 10 },
-  outcomeBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border2,
-    backgroundColor: colors.bg2,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+  tagText:     { fontFamily: "Inter_600SemiBold", color: colors.primary, fontSize: 10 },
+  actionBtns:  { flexDirection: "row", gap: 8, marginTop: 10 },
+  outBtn: {
+    borderRadius: 8, borderWidth: 1, borderColor: colors.border2,
+    backgroundColor: colors.bg3, paddingHorizontal: 14, paddingVertical: 7,
   },
-  outcomeBtnDanger: { borderColor: "rgba(194,65,12,0.40)", backgroundColor: "rgba(194,65,12,0.08)" },
-  outcomeBtnDisabled: { opacity: 0.55 },
-  outcomeBtnText: { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 12 },
-  outcomeBtnDangerText: { color: colors.warning },
+  outBtnDanger:  { borderColor: "rgba(220,38,38,0.18)", backgroundColor: colors.errorBg },
+  outBtnDisabled:{ opacity: 0.5 },
+  outBtnText:   { fontFamily: "Inter_700Bold", color: colors.text2, fontSize: 12 },
 
-  priceAlertWrap: {
-    marginHorizontal: 20,
-    marginTop: 6,
-    marginBottom: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border2,
-    backgroundColor: colors.card,
-    padding: 12,
+  priceRow: {
+    borderWidth: 1, borderColor: colors.border2, borderRadius: 12,
+    backgroundColor: colors.bg, padding: 12, marginTop: 8,
   },
-  priceAlertLoading: { paddingVertical: 8 },
-  priceAlertRow: {
-    borderWidth: 1,
-    borderColor: colors.border2,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.74)",
-    padding: 10,
-    marginTop: 8,
+  pctPill:  { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  pctPillUp:   { backgroundColor: colors.warningBg },
+  pctPillDown: { backgroundColor: colors.successBg },
+  pctText:     { fontFamily: "Inter_700Bold", fontSize: 11 },
+  priceAmounts:{ marginTop: 6, fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text2 },
+  priceFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  priceMeta:   { flex: 1, fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 11 },
+
+  filters:      { marginBottom: 8, marginTop: 4 },
+  filtersInner: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
+  chip: {
+    borderWidth: 1, borderColor: colors.border2, borderRadius: 999,
+    paddingHorizontal: 13, paddingVertical: 8, backgroundColor: colors.card,
   },
-  priceDelta: { fontFamily: "Inter_700Bold", fontSize: 11 },
-  priceDeltaUp: { color: colors.warning },
-  priceDeltaDown: { color: colors.primary },
-  priceAlertAmounts: { marginTop: 6, fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text2 },
-  priceAlertFooter: { marginTop: 9, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  priceAlertMeta: { flex: 1, fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 11 },
+  chipActive:    { borderColor: colors.primary, backgroundColor: colors.primaryBg },
+  chipText:      { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3 },
+  chipTextActive:{ color: colors.primary, fontFamily: "Inter_700Bold" },
+  filterDivider: { width: 1, height: 22, backgroundColor: colors.border2, marginHorizontal: 2 },
 
-  filters: { marginBottom: 8 },
-  filtersInner: { paddingHorizontal: 20, gap: 8, alignItems: "center" },
-  chip: { borderWidth: 1, borderColor: colors.border2, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.68)" },
-  chipActive: { borderColor: colors.primary, backgroundColor: "rgba(18,94,89,0.11)" },
-  chipText: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3 },
-  chipTextActive: { color: colors.primary, fontFamily: "Inter_700Bold" },
-  divider: { width: 1, height: 24, backgroundColor: colors.border2, marginHorizontal: 2 },
-
-  center: { alignItems: "center", justifyContent: "center", paddingVertical: 80 },
-  empty: { marginHorizontal: 20, marginTop: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.card, padding: 24, alignItems: "center" },
-  emptyTitle: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 24, textAlign: "center" },
-  emptySub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, textAlign: "center", lineHeight: 20, marginTop: 8, marginBottom: 16 },
-  emptyBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  center:  { alignItems: "center", justifyContent: "center", paddingVertical: 80 },
+  emptyWrap: { marginHorizontal: 16, marginTop: 8, marginBottom: 20 },
+  emptyCard: {
+    borderRadius: 20, borderWidth: 1, borderColor: colors.border2,
+    backgroundColor: colors.card, padding: 28, alignItems: "center",
+  },
+  emptyEmoji: { fontSize: 40, marginBottom: 12 },
+  emptyTitle:{ fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 22, textAlign: "center" },
+  emptySub:  { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, textAlign: "center", lineHeight: 21, marginTop: 8, marginBottom: 20 },
+  emptyBtn:  { borderRadius: 12, overflow: "hidden" },
+  emptyBtnGradient: { paddingHorizontal: 20, paddingVertical: 13 },
   emptyBtnText: { fontFamily: "Inter_700Bold", color: "#fff", fontSize: 14 },
 
-  list: { paddingHorizontal: 20, paddingBottom: 30 },
+  list: { paddingHorizontal: 16, paddingBottom: 30 },
 });

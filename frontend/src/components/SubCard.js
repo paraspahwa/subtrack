@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native"
 import { colors, categoryColors } from "../theme";
 
 const RATING_COLORS = ["", colors.error, "#ea580c", "#d97706", "#65a30d", colors.success];
+const RATING_LABELS = ["", "Never use", "Rarely", "Sometimes", "Often", "Every day"];
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -9,7 +10,11 @@ function daysUntil(dateStr) {
 }
 
 function fmtCurrency(amount, currency = "USD") {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2 }).format(amount);
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `${currency} ${Number(amount || 0).toFixed(2)}`;
+  }
 }
 
 export default function SubCard({ sub, onEdit, onDelete }) {
@@ -19,112 +24,156 @@ export default function SubCard({ sub, onEdit, onDelete }) {
   const isOverdue = days !== null && days < 0;
   const isWaste = sub.usage_rating !== null && sub.usage_rating !== undefined && sub.usage_rating <= 2;
 
+  const dueColor = isOverdue ? colors.error : isUrgent ? colors.warning : colors.text3;
+  const dueBg = isOverdue ? colors.errorBg : isUrgent ? colors.warningBg : colors.bg3;
+  const dueLabel = isOverdue
+    ? `${Math.abs(days)}d overdue`
+    : days === 0 ? "Due today"
+    : `${days}d left`;
+
   return (
-    <View
-      style={[
-        s.card,
-        isWaste ? s.cardWaste : null,
-        isOverdue ? s.cardOverdue : null,
-        isUrgent ? s.cardUrgent : null,
-        !sub.is_active ? s.inactive : null,
-      ]}
-    >
-      <View style={s.header}>
-        <View style={s.nameRow}>
-          <View style={[s.avatar, { backgroundColor: catColor }]}>
-            <Text style={s.avatarText}>{sub.name[0].toUpperCase()}</Text>
+    <View style={[s.card, !sub.is_active && s.inactive]}>
+      {/* Left accent bar */}
+      <View style={[s.accentBar, { backgroundColor: catColor }]} />
+
+      <View style={s.body}>
+        {/* Header row */}
+        <View style={s.header}>
+          <View style={[s.avatar, { backgroundColor: catColor + "20", borderColor: catColor + "40" }]}>
+            <Text style={[s.avatarText, { color: catColor }]}>{sub.name[0]?.toUpperCase()}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.name}>{sub.name}</Text>
+          <View style={s.titleBlock}>
+            <Text style={s.name} numberOfLines={1}>{sub.name}</Text>
             <Text style={s.category}>{sub.category}</Text>
           </View>
+          <View style={s.actions}>
+            <TouchableOpacity onPress={() => onEdit(sub)} style={s.actionBtn} hitSlop={6}>
+              <Text style={s.actionEdit}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onDelete(sub.id)} style={[s.actionBtn, s.actionDangerBtn]} hitSlop={6}>
+              <Text style={s.actionDanger}>✕</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={s.actions}>
-          <TouchableOpacity onPress={() => onEdit(sub)} style={s.actionBtn}><Text style={s.actionText}>Edit</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(sub.id)} style={[s.actionBtn, s.actionDanger]}><Text style={[s.actionText, { color: colors.error }]}>Delete</Text></TouchableOpacity>
-        </View>
-      </View>
 
-      <View style={s.footer}>
-        <View>
-          <Text style={s.amount}>{fmtCurrency(sub.amount, sub.currency)}</Text>
-          <Text style={s.cycle}>
-            {sub.billing_cycle} • {fmtCurrency(sub.monthly_cost, sub.currency)}/mo
-            {sub.num_members > 1 ? ` • ${sub.num_members} members` : ""}
-          </Text>
-          {sub.num_members > 1 && (
-            <Text style={s.shareText}>Your share: {fmtCurrency(sub.monthly_cost, sub.currency)}/mo</Text>
+        {/* Amount + Due */}
+        <View style={s.footer}>
+          <View>
+            <Text style={s.amount}>{fmtCurrency(sub.amount, sub.currency)}</Text>
+            <Text style={s.cycle}>
+              {sub.billing_cycle}
+              {sub.num_members > 1 ? ` · ${sub.num_members} members` : ""}
+            </Text>
+          </View>
+          {days !== null && (
+            <View style={[s.dueBadge, { backgroundColor: dueBg }]}>
+              <Text style={[s.dueLabel, { color: dueColor }]}>{dueLabel}</Text>
+              <Text style={s.dueDate}>
+                {new Date(sub.next_billing_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </Text>
+            </View>
           )}
         </View>
 
-        {days !== null && (
-          <View style={[s.dueBadge, isOverdue ? s.badgeOverdue : isUrgent ? s.badgeUrgent : s.badgeNormal]}>
-            <Text style={[s.dueText, isOverdue ? { color: colors.error } : isUrgent ? { color: colors.warning } : { color: colors.text3 }]}>
-              {isOverdue ? `${Math.abs(days)}d overdue` : days === 0 ? "Due today" : `${days}d left`}
-            </Text>
-            <Text style={s.dueDate}>{new Date(sub.next_billing_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
+        {/* Usage + waste */}
+        {sub.usage_rating ? (
+          <View style={s.ratingRow}>
+            <View style={[s.ratingPill, { backgroundColor: RATING_COLORS[sub.usage_rating] + "18" }]}>
+              <Text style={[s.ratingDot, { color: RATING_COLORS[sub.usage_rating] }]}>●</Text>
+              <Text style={[s.ratingText, { color: RATING_COLORS[sub.usage_rating] }]}>
+                {RATING_LABELS[sub.usage_rating]}
+              </Text>
+            </View>
+            {isWaste && (
+              <View style={s.wastePill}>
+                <Text style={s.wasteText}>Low usage</Text>
+              </View>
+            )}
+            {sub.cancel_url && isWaste && (
+              <TouchableOpacity onPress={() => Linking.openURL(sub.cancel_url)} style={s.cancelBtn}>
+                <Text style={s.cancelText}>Cancel →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : null}
+
+        {/* Paused */}
+        {!sub.is_active && (
+          <View style={s.pausedBar}>
+            <Text style={s.pausedText}>⏸ Paused</Text>
           </View>
         )}
       </View>
-
-      {sub.usage_rating ? (
-        <View style={s.ratingRow}>
-          <Text style={[s.stars, { color: RATING_COLORS[sub.usage_rating] }]}>
-            {"★".repeat(sub.usage_rating)}{"☆".repeat(5 - sub.usage_rating)}
-          </Text>
-          {isWaste && <Text style={s.waste}>Low usage detected</Text>}
-          {sub.cancel_url && isWaste ? (
-            <TouchableOpacity style={{ marginLeft: "auto" }} onPress={() => Linking.openURL(sub.cancel_url)}>
-              <Text style={s.cancelLink}>Open cancel page</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-
-      {!sub.is_active && (
-        <View style={s.pausedBadge}>
-          <Text style={s.pausedText}>Paused or cancelled</Text>
-        </View>
-      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border2, padding: 16, marginBottom: 11 },
-  cardWaste: { borderColor: "rgba(220,38,38,0.28)" },
-  cardOverdue: { borderColor: "rgba(220,38,38,0.36)" },
-  cardUrgent: { borderColor: "rgba(194,65,12,0.28)" },
-  inactive: { opacity: 0.66 },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border2,
+    marginBottom: 10,
+    flexDirection: "row",
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  inactive: { opacity: 0.55 },
+  accentBar: { width: 4, minHeight: "100%" },
+  body: { flex: 1, padding: 14 },
 
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 },
-  nameRow: { flexDirection: "row", alignItems: "center", flex: 1, gap: 11 },
-  avatar: { width: 42, height: 42, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontFamily: "Inter_800ExtraBold", color: "#fff", fontSize: 17 },
-  name: { fontFamily: "Inter_700Bold", fontSize: 17, color: colors.text },
-  category: { fontFamily: "Inter_500Medium", fontSize: 12, color: colors.text3, marginTop: 2 },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
+  avatar: {
+    width: 40, height: 40, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1,
+  },
+  avatarText: { fontFamily: "Inter_800ExtraBold", fontSize: 16 },
+  titleBlock: { flex: 1 },
+  name: { fontFamily: "Inter_700Bold", fontSize: 16, color: colors.text, letterSpacing: -0.2 },
+  category: { fontFamily: "Inter_500Medium", fontSize: 11, color: colors.text4, marginTop: 2 },
 
-  actions: { flexDirection: "row", alignItems: "center", gap: 7 },
-  actionBtn: { borderWidth: 1, borderColor: colors.border2, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: "rgba(255,255,255,0.65)" },
-  actionDanger: { borderColor: "rgba(220,38,38,0.20)", backgroundColor: "rgba(220,38,38,0.05)" },
-  actionText: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 11 },
+  actions: { flexDirection: "row", gap: 6 },
+  actionBtn: {
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: colors.border2,
+    backgroundColor: colors.bg3,
+  },
+  actionDangerBtn: { borderColor: "rgba(220,38,38,0.15)", backgroundColor: "rgba(220,38,38,0.05)" },
+  actionEdit: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 11 },
+  actionDanger: { fontFamily: "Inter_700Bold", color: colors.error, fontSize: 11 },
 
-  footer: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", gap: 10 },
-  amount: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 25, lineHeight: 28 },
-  cycle: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 12, marginTop: 3 },
+  footer: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  amount: { fontFamily: "Poppins_800ExtraBold", color: colors.text, fontSize: 24, lineHeight: 28, letterSpacing: -0.5 },
+  cycle: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 12, marginTop: 2 },
+
   dueBadge: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, alignItems: "flex-end" },
-  badgeOverdue: { backgroundColor: "rgba(220,38,38,0.07)" },
-  badgeUrgent: { backgroundColor: "rgba(194,65,12,0.08)" },
-  badgeNormal: { backgroundColor: "rgba(15,23,42,0.05)" },
-  dueText: { fontFamily: "Inter_700Bold", fontSize: 12 },
-  dueDate: { fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 11, marginTop: 2 },
+  dueLabel: { fontFamily: "Inter_700Bold", fontSize: 12 },
+  dueDate: { fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 11, marginTop: 1 },
 
-  ratingRow: { marginTop: 11, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  stars: { fontFamily: "Inter_700Bold", fontSize: 13, letterSpacing: 0.6 },
-  waste: { fontFamily: "Inter_600SemiBold", color: colors.error, fontSize: 11, backgroundColor: "rgba(220,38,38,0.10)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
-  cancelLink: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 11 },
+  ratingRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  ratingPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  ratingDot: { fontSize: 8 },
+  ratingText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  wastePill: {
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: colors.errorBg, borderWidth: 1, borderColor: "rgba(220,38,38,0.18)",
+  },
+  wasteText: { fontFamily: "Inter_600SemiBold", color: colors.error, fontSize: 11 },
+  cancelBtn: { marginLeft: "auto" },
+  cancelText: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 11 },
 
-  pausedBadge: { marginTop: 10, backgroundColor: "rgba(148,163,184,0.20)", borderRadius: 8, paddingVertical: 6, alignItems: "center" },
+  pausedBar: {
+    marginTop: 10, borderRadius: 8, paddingVertical: 6, alignItems: "center",
+    backgroundColor: colors.bg3, borderWidth: 1, borderColor: colors.border2,
+  },
   pausedText: { fontFamily: "Inter_600SemiBold", color: colors.text3, fontSize: 12 },
-  shareText: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 11, marginTop: 2 },
 });
