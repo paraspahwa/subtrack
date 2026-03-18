@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, Platform } from "react-native";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
 import { Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black } from "@expo-google-fonts/poppins";
 
@@ -24,6 +24,10 @@ export default function App() {
     Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black,
   });
 
+  // On web, fonts are served from the bundle and may 404 on static hosts.
+  // Don't block rendering – show content immediately with system font fallbacks.
+  const isReady = Platform.OS === "web" ? true : fontsLoaded;
+
   useEffect(() => {
     (async () => {
       try {
@@ -35,7 +39,7 @@ export default function App() {
     })();
   }, []);
 
-  if (!fontsLoaded || !initialRoute) {
+  if (!isReady || !initialRoute) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={colors.primary} size="large" />
