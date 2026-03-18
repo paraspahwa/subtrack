@@ -24,8 +24,8 @@ const mapLegacyAuth = (data) => {
     access_token: data.accessToken,
     user_id: data.user.id,
     email: data.user.email,
-    full_name: data.user.raw_user_meta_data?.name || "",
-    plan: data.user.raw_user_meta_data?.plan || "free",
+    full_name: data.user.user_metadata?.name || "",
+    plan: data.user.user_metadata?.plan || "free",
     requireEmailVerification: data.requireEmailVerification,
   };
 };
@@ -57,12 +57,15 @@ export const api = {
   },
 
   me: async () => {
-    const { data: userData } = await handle(insforge.auth.getCurrentUser());
-    const { data: profileData } = await handle(insforge.database.from("profiles").select("*").eq("id", userData.user.id).single());
+    const userData = await handle(insforge.auth.getCurrentUser());
+    const profileData = await handle(insforge.database.from("profiles").select("*").eq("id", userData.user.id).single());
     return { ...userData.user, ...profileData, full_name: profileData.full_name };
   },
 
-  updateMe: (body) => handle(insforge.database.from("profiles").update(body).eq("id", insforge.auth.session()?.user?.id)),
+  updateMe: async (body) => {
+    const { data: sessionData } = await insforge.auth.getCurrentSession();
+    return handle(insforge.database.from("profiles").update(body).eq("id", sessionData?.session?.user?.id));
+  },
 
   forgotPassword: (email) => handle(insforge.auth.sendResetPasswordEmail({ email })),
   
@@ -73,7 +76,11 @@ export const api = {
   // Subscriptions
   listSubs: () => handle(insforge.database.from("subscriptions").select("*").order("next_billing_date", { ascending: true })),
   
-  createSub: (body) => handle(insforge.database.from("subscriptions").insert([body]).select().single()),
+  createSub: async (body) => {
+    const { data: sessionData } = await insforge.auth.getCurrentSession();
+    const userId = sessionData?.session?.user?.id;
+    return handle(insforge.database.from("subscriptions").insert([{ ...body, user_id: userId }]).select().single());
+  },
   
   updateSub: (id, b) => handle(insforge.database.from("subscriptions").update(b).eq("id", id).select().single()),
   
@@ -105,9 +112,16 @@ export const api = {
   // Discovery
   discoveryMailbox: () => handle(insforge.database.from("mailbox_connections").select("*")),
   
-  connectDiscoveryMailbox: (provider, email) => handle(insforge.database.from("mailbox_connections").insert([{ provider, email }])),
+  connectDiscoveryMailbox: async (provider, email) => {
+    const { data: sessionData } = await insforge.auth.getCurrentSession();
+    const userId = sessionData?.session?.user?.id;
+    return handle(insforge.database.from("mailbox_connections").insert([{ provider, email, user_id: userId }]));
+  },
   
-  disconnectDiscoveryMailbox: () => handle(insforge.database.from("mailbox_connections").delete().eq("user_id", insforge.auth.session()?.user?.id)),
+  disconnectDiscoveryMailbox: async () => {
+    const { data: sessionData } = await insforge.auth.getCurrentSession();
+    return handle(insforge.database.from("mailbox_connections").delete().eq("user_id", sessionData?.session?.user?.id));
+  },
 
   discoveryCandidates: (status = "pending") => handle(insforge.database.from("discovery_candidates").select("*").eq("status", status)),
 
