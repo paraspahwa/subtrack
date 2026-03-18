@@ -72,7 +72,7 @@ class SubscriptionCreate(BaseModel):
     color: Optional[str] = None
     is_active: bool = True
     usage_rating: Optional[int] = None  # 1 (never) – 5 (daily)
-    cancel_url: Optional[int] = None
+    cancel_url: Optional[str] = None
     num_members: int = 1
 
 

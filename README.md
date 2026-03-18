@@ -1,107 +1,135 @@
 # SubTrack — Subscription Tracker
 
-> Stop losing money to forgotten subscriptions. Track all your subscriptions in one place, see your true monthly spend, and catch renewals before they hit.
+Stop losing money to forgotten subscriptions. SubTrack lets you track all your subscriptions in one place, visualize your true monthly spend, catch price increases, and stay on top of upcoming renewals — with a gamification layer that makes managing finances engaging.
 
 ---
 
-## 🚀 One-Click Setup (GitHub Codespaces)
+## Tech Stack
 
-1. Click **Code** -> **Codespaces** -> **Create codespace on main**.
-2. Once the container starts, the backend and frontend dependencies will auto-install (if configured) or run:
-   ```bash
-   # Terminal 1: Backend
-   cd backend && pip install -r requirements.txt && uvicorn main:app --reload
-   # Terminal 2: Frontend
-   cd frontend && npm install && npm start
-   ```
-3. Use the **Ports** tab to open the frontend (default `19006` for web).
+| Layer | Technology |
+|---|---|
+| Frontend | React Native (Expo) |
+| Backend (primary) | InsForge SDK (`@insforge/sdk`) |
+| Backend (fallback) | FastAPI (Python) |
+| Database | InsForge Postgres (with Row Level Security) |
+| Edge Functions | Deno / TypeScript (deployed on InsForge) |
+| Payments | Razorpay |
+| Auth | InsForge Auth (JWT, email OTP verification) |
 
 ---
 
-## 💻 Local Machine Setup
+## Screens
+
+| Screen | Description |
+|---|---|
+| Landing | Marketing/onboarding entry point |
+| Auth | Sign up, log in, email verification, password reset |
+| Dashboard | Subscription list, analytics panel, action center, price alerts |
+| Pricing | Plan comparison and Razorpay payment flow |
+| Settings | Profile, theme, mailbox discovery, notification preferences |
+| Calendar |  Monthly billing calendar view of upcoming charges |
+| BossBattle |  Gamification — defeat subscription "bosses" by cancelling unused services |
+
+---
+
+## Features
+
+- **Subscription Tracking**: Add, edit, and delete subscriptions with billing cycle, currency, category, usage rating, and shared member count.
+- **Analytics**: Real-time monthly/yearly spend totals, spend-by-category breakdown, and upcoming renewal list — currency-converted to your home currency.
+- **Price Alerts**: Automatic detection of amount changes on subscriptions; dismissible per-subscription alerts.
+- **Billing Calendar**:  Visual monthly calendar showing when each subscription renews.
+- **Action Center**: Flags subscriptions due within 7 or 30 days and subscriptions with a low usage rating (1–2 out of 5).
+- **Mailbox Discovery**: Connect a Gmail/email account to automatically detect subscription candidates from receipts. Accept, reject, or mark as false positive.
+- **Payments / Plan Upgrade**: Razorpay-powered upgrade flow for Pro and premium tiers.
+- **Gamification — Boss Battle**:  XP, levels, achievements, and boss battles tied to cancelling low-value subscriptions and hitting savings milestones.
+- **Multi-Currency**: Subscriptions stored in their native currency and converted to your home currency (USD, INR, EUR, GBP supported) for all totals.
+- **Themes**: Light/dark and custom theme support via ThemeContext.
+
+---
+
+## Setup
 
 ### Prerequisites
-- **Node.js 18+** & **npm**
-- **Python 3.11+**
-- **Docker** (Optional, but recommended for Database)
 
-### 1. Backend & Database
+- Node.js 18+
+- npm
+
+### 1. Link InsForge Project
+
 ```bash
-cd backend
-cp .env.example .env  # Configure DATABASE_URL and SECRET_KEY
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+npx @insforge/cli link --project-id 2a8ec6eb-db15-462d-b557-88b207b3bb5d
 ```
-*Note: If using Docker, just run `docker compose up` from the root.*
 
-### 2. Frontend (Mobile & Web)
+### 2. Run Database Migrations
+
+Apply migrations from `insforge/migrations/` in order:
+
+```
+insforge/migrations/01_schema.sql   # Tables: profiles, subscriptions, payments, mailbox_connections, discovery_candidates
+insforge/migrations/02_triggers.sql # Auto-creates profile row on new user signup
+```
+
+### 3. Deploy Edge Functions
+
+Edge functions live in `insforge/functions/`. Deploy each via the InsForge CLI or dashboard:
+
+- `getanalytics` — spend analytics with currency conversion
+- `razorpay-order` — creates a Razorpay order and stores a pending payment record
+- `razorpay-verify` — verifies Razorpay signature and upgrades user plan
+- `accept-candidate` — converts a discovery candidate into a tracked subscription
+
+### 4. Frontend
+
 ```bash
 cd frontend
 npm install --legacy-peer-deps
 npm start
 ```
 
----
+Open on web (Expo default port `19006`), Android emulator (press `a`), or iOS simulator (press `i`).
 
-## 📱 Mobile Development (Emulators & Devices)
-
-### Android Emulator (Android Studio)
-1. Open **Android Studio** -> **Device Manager** -> Start your Pixel/Nexus emulator.
-2. In the terminal where `npm start` is running, press `a`.
-3. Set `API_URL = "http://10.0.2.2:8000"` in `frontend/src/config.js`.
-
-### iOS Simulator (Xcode - macOS Only)
-1. Install **Xcode**.
-2. In the terminal where `npm start` is running, press `i`.
-3. Set `API_URL = "http://localhost:8000"` in `frontend/src/config.js`.
-
-### Physical Device (Expo Go)
-1. Install **Expo Go** from App Store/Play Store.
-2. Scan the QR code shown in your terminal.
-3. Use your computer's local IP (e.g., `192.168.1.x`) for `API_URL`.
+The InsForge base URL and anon key are configured in `frontend/src/config.js`.
 
 ---
 
-## ☁️ AWS Server Deployment (EC2/Production)
+## Project Structure
 
-### Recommended: Docker Compose
-1. **Provision EC2**: Use Ubuntu 22.04 LTS.
-2. **Install Docker**:
-   ```bash
-   sudo apt update && sudo apt install docker.io docker-compose -y
-   ```
-3. **Deploy**:
-   ```bash
-   git clone https://github.com/your-username/subtrack.git
-   cd subtrack
-   cp .env.example .env # Set production values
-   docker-compose up -d --build
-   ```
-4. **Security Groups**: Ensure ports `80` (Web), `8000` (API), and `5432` (DB - internal only) are configured.
-
----
-
-## 🛠 Features
-
-### Premium Subscriptions
-- **Multi-Currency**: Automatic conversion to your Home Currency (USD, INR, EUR, etc.).
-- **Shared Tracking**: Split costs with roommates or family members.
-- **Waste Detection**: AI-powered usage rating to find subscriptions you don't need.
-- **Spending Forecast**: Visual charts for upcoming 12-month spend.
-
----
-
-## 📜 API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/analytics` | Full spend breakdown (Currency-aware) |
-| POST | `/api/subscriptions` | Create new sub (Supports `num_members`) |
-| GET | `/api/auth/me` | User profile & `home_currency` settings |
-
-Full docs: `http://localhost:8000/docs`
+```
+subtrack/
+  App.js                         # Root navigator (React Navigation)
+  frontend/
+    src/
+      api.js                     # All API calls (InsForge SDK)
+      config.js                  # InsForge baseUrl + anonKey
+      theme.js                   # Design tokens and category definitions
+      ThemeContext.js             # Theme provider
+      screens/
+        LandingScreen.js
+        AuthScreen.js
+        DashboardScreen.js
+        PricingScreen.js
+        SettingsScreen.js
+      components/
+        SubCard.js
+        SubModal.js
+        AnalyticsPanel.js
+        StaggerReveal.js
+        BrandShapes.js
+        InteractiveButton.js
+  insforge/
+    migrations/
+      01_schema.sql
+      02_triggers.sql
+    functions/
+      getanalytics/
+      razorpay-order/
+      razorpay-verify/
+      accept-candidate/
+      admin-create-user/
+```
 
 ---
 
-## 🤝 Support
+## Support
+
 For enterprise setups or custom integrations, contact the SubTrack dev team.

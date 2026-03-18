@@ -157,4 +157,69 @@ export const api = {
     if (error || !userData?.user?.id) throw error || new Error("No active session");
     return handle(insforge.database.from("profiles").update({ plan: planType }).eq("id", userData.user.id));
   },
+
+  // Gamification
+  getUserXP: async () => {
+    const { data, error } = await insforge.database.from("user_xp").select("*").single();
+    if (error && error.code === "PGRST116") {
+      const { data: userData } = await insforge.auth.getCurrentUser();
+      const { data: newXP, error: createErr } = await insforge.database
+        .from("user_xp")
+        .insert({ user_id: userData?.user?.id, total_xp: 0, level: 1, current_hp: 100, max_hp: 100 })
+        .select()
+        .single();
+      if (createErr) throw createErr;
+      return newXP;
+    }
+    if (error) throw error;
+    return data;
+  },
+
+  updateUserXP: async (xpGain) => {
+    const current = await api.getUserXP();
+    const newTotal = (current.total_xp || 0) + xpGain;
+    const newLevel = Math.floor(newTotal / 500) + 1;
+    const { data, error } = await insforge.database
+      .from("user_xp")
+      .update({ total_xp: newTotal, level: newLevel, updated_at: new Date().toISOString() })
+      .eq("user_id", current.user_id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  getAchievements: () => handle(insforge.database.from("achievements").select("*").order("xp_reward")),
+
+  getUserAchievements: () => handle(insforge.database
+    .from("user_achievements")
+    .select("*, achievements(*)")
+    .order("earned_at", { ascending: false })),
+
+  getActiveBoss: () => handle(insforge.database
+    .from("boss_battles")
+    .select("*, user_boss_progress(*)")
+    .eq("is_active", true)
+    .maybeSingle()),
+
+  dealBossDamage: async (bossId, damage) => {
+    const { data: existing } = await insforge.database
+      .from("user_boss_progress")
+      .select("*")
+      .eq("boss_id", bossId)
+      .maybeSingle();
+    if (existing) {
+      return handle(insforge.database
+        .from("user_boss_progress")
+        .update({ damage_dealt: existing.damage_dealt + damage })
+        .eq("id", existing.id)
+        .select()
+        .single());
+    }
+    return handle(insforge.database
+      .from("user_boss_progress")
+      .insert({ boss_id: bossId, damage_dealt: damage })
+      .select()
+      .single());
+  },
 };
