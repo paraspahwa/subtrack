@@ -63,8 +63,9 @@ export const api = {
   },
 
   updateMe: async (body) => {
-    const sessionData = insforge.auth.getSession();
-    return handle(insforge.database.from("profiles").update(body).eq("id", sessionData?.user?.id));
+    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
+    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
+    return handle(insforge.database.from("profiles").update(body).eq("id", sessionData.session.user.id));
   },
 
   forgotPassword: (email) => handle(insforge.auth.sendResetPasswordEmail({ email })),
@@ -77,8 +78,9 @@ export const api = {
   listSubs: () => handle(insforge.database.from("subscriptions").select("*").order("next_billing_date", { ascending: true })),
   
   createSub: async (body) => {
-    const sessionData = insforge.auth.getSession();
-    const userId = sessionData?.user?.id;
+    const { data: sessionData, error } = await insforge.auth.getCurrentSession();
+    if (error || !sessionData?.session?.user?.id) throw error || new Error("No active session");
+    const userId = sessionData.session.user.id;
     return handle(insforge.database.from("subscriptions").insert([{ ...body, user_id: userId }]).select().single());
   },
   

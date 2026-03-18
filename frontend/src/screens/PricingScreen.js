@@ -137,7 +137,9 @@ export default function PricingScreen({ navigation }) {
   };
 
   const handleUpgrade = async () => {
-    const { data } = await insforge.auth.getCurrentUser();
+    const { data: sessionData, error: sessionError } = await insforge.auth.getCurrentSession();
+    if (sessionError || !sessionData?.session?.user?.id) throw sessionError || new Error("No active session");
+    const data = { user: sessionData.session.user };
     if (!data?.user) {
       navigation.navigate("Auth", { mode: "signup" });
       return;

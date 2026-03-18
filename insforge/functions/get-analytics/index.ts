@@ -53,15 +53,15 @@ export default async function (req: Request): Promise<Response> {
   });
 
   // 1. Get User Profile
-  const { data: userData, error: userError } = await client.auth.getCurrentUser();
-  if (userError || !userData?.user?.id) {
+  const { data: sessionData, error: sessionError } = await client.auth.getCurrentSession();
+  if (sessionError || !sessionData?.session?.user?.id) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  const userId = userData.user.id;
+  const userId = sessionData.session.user.id;
 
   // 2. Get Profile Data (Currency)
   const { data: profiles, error: profileError } = await client.database

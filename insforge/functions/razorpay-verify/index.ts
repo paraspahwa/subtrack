@@ -34,15 +34,15 @@ export default async function (req: Request): Promise<Response> {
     edgeFunctionToken: userToken
   });
 
-  const { data: userData, error: userError } = await client.auth.getCurrentUser();
-  if (userError || !userData?.user?.id) {
+  const { data: sessionData, error: sessionError } = await client.auth.getCurrentSession();
+  if (sessionError || !sessionData?.session?.user?.id) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  const userId = userData.user.id;
+  const userId = sessionData.session.user.id;
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
   const secret = Deno.env.get('RAZORPAY_KEY_SECRET') || '';

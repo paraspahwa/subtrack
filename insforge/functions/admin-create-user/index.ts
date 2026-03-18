@@ -27,11 +27,14 @@ export default async function (req: Request): Promise<Response> {
   });
 
   // Verify caller is authenticated
-  const { data: caller, error: callerErr } = await client.auth.getCurrentUser();
-  if (callerErr || !caller?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    const { data: sessionData, error: sessionError } = await client.auth.getCurrentSession();
+    if (sessionError || !sessionData?.session?.user?.id) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const userData = { user: sessionData.session.user };
   }
 
   try {

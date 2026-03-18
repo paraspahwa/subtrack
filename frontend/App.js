@@ -31,8 +31,8 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await insforge.auth.getCurrentUser();
-        setInitialRoute(data?.user ? "Dashboard" : "Landing");
+        const { data: sessionData, error } = await insforge.auth.getCurrentSession();
+        setInitialRoute(sessionData?.session?.user ? "Dashboard" : "Landing");
       } catch {
         setInitialRoute("Landing");
       }

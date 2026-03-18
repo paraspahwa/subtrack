@@ -19,13 +19,14 @@ export default async function (req: Request): Promise<Response> {
     edgeFunctionToken: userToken
   });
 
-  const { data: userData, error: userError } = await client.auth.getCurrentUser();
-  if (userError || !userData?.user?.id) {
+  const { data: sessionData, error: sessionError } = await client.auth.getCurrentSession();
+  if (sessionError || !sessionData?.session?.user?.id) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
+  const userData = { user: sessionData.session.user };
 
   const userId = userData.user.id;
   const { id } = await req.json();
