@@ -6,13 +6,15 @@ import { View, ActivityIndicator, Platform } from "react-native";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
 import { Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black } from "@expo-google-fonts/poppins";
 
-import LandingScreen  from "./src/screens/LandingScreen";
-import AuthScreen     from "./src/screens/AuthScreen";
-import DashboardScreen from "./src/screens/DashboardScreen";
-import PricingScreen  from "./src/screens/PricingScreen";
-import SettingsScreen from "./src/screens/SettingsScreen";
-import { colors }     from "./src/theme";
-import { insforge }   from "./src/api";
+import LandingScreen    from "./src/screens/LandingScreen";
+import AuthScreen       from "./src/screens/AuthScreen";
+import DashboardScreen  from "./src/screens/DashboardScreen";
+import PricingScreen    from "./src/screens/PricingScreen";
+import SettingsScreen   from "./src/screens/SettingsScreen";
+import CalendarScreen   from "./src/screens/CalendarScreen";
+import BossBattleScreen from "./src/screens/BossBattleScreen";
+import { colors }       from "./src/theme";
+import { insforge }     from "./src/api";
 import { ThemeProvider } from "./src/ThemeContext";
 
 const Stack = createNativeStackNavigator();
@@ -60,7 +62,9 @@ export default function App() {
 				<Stack.Screen name="Auth"      component={AuthScreen}      />
 				<Stack.Screen name="Dashboard" component={DashboardScreen} />
 				<Stack.Screen name="Pricing"   component={PricingScreen}   />
-				<Stack.Screen name="Settings"  component={SettingsScreen}  />
+				<Stack.Screen name="Settings"    component={SettingsScreen}   />
+				<Stack.Screen name="Calendar"    component={CalendarScreen}   />
+				<Stack.Screen name="BossBattle"  component={BossBattleScreen} />
 			</Stack.Navigator>
 		</NavigationContainer>
 		</ThemeProvider>
