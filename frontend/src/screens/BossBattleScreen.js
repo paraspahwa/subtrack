@@ -239,7 +239,7 @@ const s = StyleSheet.create({
   noSubs: { backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 20, alignItems: "center" },
   noSubsText: { fontFamily: "Inter_400Regular", color: "rgba(248,250,252,0.5)", fontSize: 14 },
   subOption: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 14, flexDirection: "row", alignItems: "center", marginBottom: 8, borderWidth: 1, borderColor: "transparent" },
-  subOptionSelected: { borderColor: colors.primaryLight, backgroundColor: "rgba(23,128,119,0.15)" },
+  subOptionSelected: { borderColor: colors.primaryLight, backgroundColor: "rgba(99,102,241,0.15)" },
   subOptionInfo: { flex: 1 },
   subOptionName: { fontFamily: "Inter_600SemiBold", color: "#f8fafc", fontSize: 15 },
   subOptionDmg: { fontFamily: "Inter_400Regular", color: "rgba(248,250,252,0.6)", fontSize: 12, marginTop: 2 },

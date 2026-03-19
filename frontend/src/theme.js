@@ -7,7 +7,7 @@ export const colors = {
   card2:        "#f4f6f9",
 
   // Borders — crisp, minimal
-  border:       "rgba(13,92,87,0.18)",
+  border:       "rgba(99,102,241,0.18)",
   border2:      "rgba(15,23,42,0.09)",
   border3:      "rgba(15,23,42,0.16)",
 
@@ -18,12 +18,15 @@ export const colors = {
   text4:        "#94a3b8",
   text5:        "#cbd5e1",
 
-  // Brand — deep teal
-  primary:      "#0d5c57",
-  primaryDark:  "#0a4844",
-  primaryLight: "#178077",
-  primaryBg:    "rgba(13,92,87,0.08)",
-  primaryBg2:   "rgba(13,92,87,0.14)",
+  // Brand — indigo + pink accent
+  primary:      "#6366F1",
+  primaryDark:  "#4F46E5",
+  primaryLight: "#818CF8",
+  primaryBg:    "rgba(99,102,241,0.08)",
+  primaryBg2:   "rgba(99,102,241,0.14)",
+  accent:       "#EC4899",
+  accentBg:     "rgba(236,72,153,0.09)",
+  accentDark:   "#DB2777",
 
   // Semantic
   success:      "#16a34a",

@@ -10,38 +10,33 @@ import StaggerReveal from "../components/StaggerReveal";
 import InteractiveButton from "../components/InteractiveButton";
 import BrandShapes from "../components/BrandShapes";
 
-const FREE_FEATURES = [
-  "1 active subscription",
+const GENIN_FEATURES = [
+  "Track up to 3 subscriptions",
   "Renewal timeline",
   "Core analytics",
   "Category organization",
 ];
 
-const PRO_FEATURES = [
+const CHUNIN_FEATURES = [
   "Unlimited subscriptions",
   "Advanced spend insights",
   "Priority renewal reminders",
   "Waste detection & savings view",
   "Most expensive service tracking",
   "Shared subscription split-cost",
-  "CSV export",
+  "Billing calendar view",
   "Priority support",
 ];
 
-const FAMILY_FEATURES = [
-  "Everything in Pro",
-  "Up to 5 family members",
-  "Shared family dashboard",
-  "Per-member spending breakdown",
-  "Family total & per-person cost",
-  "Collaborative cancel decisions",
-];
-
-const ANNUAL_FEATURES = [
-  "Everything in Pro",
-  "Save 26% vs monthly",
-  "Annual billing receipt",
+const JONIN_FEATURES = [
+  "Everything in Chunin",
+  "Boss Battle gamification",
+  "XP & level system",
+  "Exclusive achievement badges",
+  "Mailbox discovery (email scan)",
   "Early access to new features",
+  "CSV export",
+  "Dedicated support",
 ];
 
 const WEB_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
@@ -247,107 +242,81 @@ export default function PricingScreen({ navigation }) {
           <Text style={s.topPill}>No hidden fees</Text>
         </View>
 
-        <Text style={s.title}>Simple pricing,{"\n"}better spending habits</Text>
-        <Text style={s.sub}>Start free. Upgrade when your subscriptions grow.</Text>
+        <Text style={s.title}>Choose your{"\n"}ninja rank</Text>
+        <Text style={s.sub}>Start as a Genin. Rise through the ranks as you master your finances.</Text>
 
-        {/* Free Plan */}
+        {/* Genin — Free */}
         <StaggerReveal delay={80} profile="snappy">
           <View style={s.card}>
-            <View style={s.planBadge}><Text style={s.planBadgeText}>FREE</Text></View>
+            <View style={s.planBadge}><Text style={s.planBadgeText}>GENIN</Text></View>
             <View style={s.priceRow}>
-              <Text style={s.price}>$0</Text>
+              <Text style={s.price}>₹0</Text>
               <Text style={s.per}>/month</Text>
             </View>
-            <Text style={s.desc}>Get started tracking your biggest recurring charge.</Text>
-            <FeatureList items={FREE_FEATURES} />
-            <InteractiveButton label="Start Free" variant="ghost" onPress={() => navigation.navigate("Auth", { mode: "signup" })} />
+            <Text style={s.desc}>Begin your journey — track your most important subscriptions for free.</Text>
+            <FeatureList items={GENIN_FEATURES} />
+            <InteractiveButton label="Start as Genin" variant="ghost" onPress={() => navigation.navigate("Auth", { mode: "signup" })} />
           </View>
         </StaggerReveal>
 
-        {/* Pro Plan */}
+        {/* Chunin — Pro */}
         <StaggerReveal delay={150} profile="smooth">
           <LinearGradient colors={theme.proGradient} style={s.proCard}>
             <View style={s.recommendedBadge}>
-              <Text style={s.recommendedText}>⭐ Most Popular</Text>
+              <Text style={s.recommendedText}>Most Popular</Text>
             </View>
-            <View style={s.planBadgeWhite}><Text style={s.planBadgeTextWhite}>PRO</Text></View>
+            <View style={s.planBadgeWhite}><Text style={s.planBadgeTextWhite}>CHUNIN</Text></View>
             <View style={s.priceRow}>
-              <Text style={s.pricePro}>$9</Text>
+              <Text style={s.pricePro}>₹99</Text>
               <Text style={s.perPro}>/month</Text>
             </View>
-            <Text style={s.descPro}>For power users who want unlimited visibility and zero subscription waste.</Text>
-            <FeatureList items={PRO_FEATURES} dark />
+            <Text style={s.descPro}>Unlimited tracking and deep insights — for the dedicated subscription strategist.</Text>
+            <FeatureList items={CHUNIN_FEATURES} dark />
             {isLoadingPlan("pro") ? (
               <View style={s.proBtnLoading}><ActivityIndicator color="#fff" /></View>
             ) : (
               <TouchableOpacity
                 style={s.proBtn}
-                onPress={() => handleUpgrade("pro", 900)}
+                onPress={() => handleUpgrade("pro", 9900)}
                 disabled={loading}
               >
-                <Text style={s.proBtnText}>Upgrade to Pro →</Text>
+                <Text style={s.proBtnText}>Become Chunin →</Text>
               </TouchableOpacity>
             )}
           </LinearGradient>
         </StaggerReveal>
 
-        {/* Family Plan */}
+        {/* Jonin — Elite */}
         <StaggerReveal delay={220} profile="smooth">
-          <View style={[s.card, s.familyCard]}>
-            <View style={[s.planBadge, { backgroundColor: "#fef3c7" }]}>
-              <Text style={[s.planBadgeText, { color: "#92400e" }]}>FAMILY</Text>
+          <View style={[s.card, s.joninCard]}>
+            <View style={s.joninRow}>
+              <View style={[s.planBadge, { backgroundColor: "rgba(236,72,153,0.12)" }]}>
+                <Text style={[s.planBadgeText, { color: "#DB2777" }]}>JONIN</Text>
+              </View>
+              <View style={s.eliteBadge}>
+                <Text style={s.eliteText}>Elite</Text>
+              </View>
             </View>
             <View style={s.priceRow}>
-              <Text style={s.price}>$14</Text>
+              <Text style={s.price}>₹199</Text>
               <Text style={s.per}>/month</Text>
             </View>
-            <Text style={s.desc}>Perfect for households. Track everyone's subscriptions together and cut shared waste.</Text>
-            <Text style={s.planSubNote}>👨‍👩‍👧‍👦 Up to 5 members</Text>
-            <FeatureList items={FAMILY_FEATURES} />
-            {isLoadingPlan("family") ? (
+            <Text style={s.desc}>The full arsenal — gamification, boss battles, mailbox discovery, and elite support.</Text>
+            <FeatureList items={JONIN_FEATURES} />
+            {isLoadingPlan("jonin") ? (
               <View style={[s.ghostBtnLoading]}><ActivityIndicator color={colors.text3} /></View>
             ) : (
               <InteractiveButton
-                label="Get Family Plan →"
+                label="Ascend to Jonin →"
                 variant="ghost"
-                onPress={() => handleUpgrade("family", 1400)}
+                onPress={() => handleUpgrade("jonin", 19900)}
                 disabled={loading}
               />
             )}
           </View>
         </StaggerReveal>
 
-        {/* Annual Pro */}
-        <StaggerReveal delay={290} profile="smooth">
-          <View style={[s.card, s.annualCard]}>
-            <View style={s.annualRow}>
-              <View style={[s.planBadge, { backgroundColor: "#dcfce7" }]}>
-                <Text style={[s.planBadgeText, { color: "#166534" }]}>ANNUAL</Text>
-              </View>
-              <View style={s.savingsBadge}>
-                <Text style={s.savingsText}>Save 26%</Text>
-              </View>
-            </View>
-            <View style={s.priceRow}>
-              <Text style={s.price}>$79</Text>
-              <Text style={s.per}>/year</Text>
-            </View>
-            <Text style={s.desc}>All Pro features billed annually. Equivalent to $6.58/month.</Text>
-            <FeatureList items={ANNUAL_FEATURES} />
-            {isLoadingPlan("annual") ? (
-              <View style={s.ghostBtnLoading}><ActivityIndicator color={colors.text3} /></View>
-            ) : (
-              <InteractiveButton
-                label="Get Annual Pro →"
-                variant="ghost"
-                onPress={() => handleUpgrade("annual", 7900)}
-                disabled={loading}
-              />
-            )}
-          </View>
-        </StaggerReveal>
-
-        <Text style={s.footer}>Cancel anytime · 14-day money-back guarantee · Secure checkout</Text>
+        <Text style={s.footer}>Cancel anytime · Secure checkout via Razorpay</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -374,8 +343,14 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border2, borderRadius: 22,
     backgroundColor: colors.card, padding: 20, marginBottom: 14,
   },
-  familyCard: { borderColor: "rgba(217,119,6,0.2)", backgroundColor: "#fffbf0" },
-  annualCard: { borderColor: "rgba(22,163,74,0.2)", backgroundColor: "#f0fdf4" },
+  joninCard: { borderColor: "rgba(236,72,153,0.25)", backgroundColor: "#fdf4ff" },
+
+  joninRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 0 },
+  eliteBadge: {
+    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4,
+    backgroundColor: "rgba(236,72,153,0.12)", borderWidth: 1, borderColor: "rgba(236,72,153,0.3)",
+  },
+  eliteText: { fontFamily: "Inter_700Bold", color: "#DB2777", fontSize: 11 },
 
   planBadge: {
     alignSelf: "flex-start", borderRadius: 999,
@@ -394,14 +369,6 @@ const s = StyleSheet.create({
   price: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 42, lineHeight: 46 },
   per: { fontFamily: "Inter_500Medium", color: colors.text3, fontSize: 14, marginBottom: 7 },
   desc: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 14, lineHeight: 20, marginBottom: 14 },
-  planSubNote: { fontFamily: "Inter_600SemiBold", color: "#92400e", fontSize: 13, marginBottom: 12 },
-
-  annualRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 0 },
-  savingsBadge: {
-    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4,
-    backgroundColor: "#dcfce7", borderWidth: 1, borderColor: "rgba(22,163,74,0.25)",
-  },
-  savingsText: { fontFamily: "Inter_700Bold", color: "#166534", fontSize: 11 },
 
   featureList: { gap: 9, marginBottom: 18 },
   featureRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },

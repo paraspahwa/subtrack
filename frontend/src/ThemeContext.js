@@ -2,6 +2,19 @@ import { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const THEMES = {
+  indigo: {
+    label: "Indigo",
+    swatch: "#6366F1",
+    primary: "#6366F1",
+    primaryDark: "#4F46E5",
+    primaryLight: "#818CF8",
+    primaryBg: "rgba(99,102,241,0.08)",
+    primaryBg2: "rgba(99,102,241,0.14)",
+    heroGradient: ["#4F46E5", "#6366F1"],
+    proGradient: ["#4F46E5", "#7C3AED"],
+    border: "rgba(99,102,241,0.18)",
+    accent: "#EC4899",
+  },
   teal: {
     label: "Teal",
     swatch: "#0d5c57",
@@ -13,6 +26,7 @@ export const THEMES = {
     heroGradient: ["#0d5c57", "#0a4844"],
     proGradient: ["#0f4b47", "#125e59"],
     border: "rgba(13,92,87,0.18)",
+    accent: "#EC4899",
   },
   ocean: {
     label: "Ocean",
@@ -25,6 +39,7 @@ export const THEMES = {
     heroGradient: ["#1d4ed8", "#1e3a8a"],
     proGradient: ["#1e3a8a", "#1d4ed8"],
     border: "rgba(29,78,216,0.18)",
+    accent: "#EC4899",
   },
   violet: {
     label: "Violet",
@@ -37,6 +52,7 @@ export const THEMES = {
     heroGradient: ["#7c3aed", "#5b21b6"],
     proGradient: ["#5b21b6", "#6d28d9"],
     border: "rgba(124,58,237,0.18)",
+    accent: "#EC4899",
   },
   rose: {
     label: "Rose",
@@ -49,6 +65,7 @@ export const THEMES = {
     heroGradient: ["#e11d48", "#9f1239"],
     proGradient: ["#9f1239", "#be123c"],
     border: "rgba(225,29,72,0.18)",
+    accent: "#EC4899",
   },
   amber: {
     label: "Amber",
@@ -61,13 +78,14 @@ export const THEMES = {
     heroGradient: ["#d97706", "#92400e"],
     proGradient: ["#92400e", "#b45309"],
     border: "rgba(217,119,6,0.18)",
+    accent: "#EC4899",
   },
 };
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-  const [themeKey, setThemeKey] = useState("teal");
+  const [themeKey, setThemeKey] = useState("indigo");
 
   useEffect(() => {
     AsyncStorage.getItem("st_theme").then((val) => {

@@ -221,7 +221,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={s.divider} />
           <Row label="Name" value={user?.name || "-"} />
           <View style={s.divider} />
-          <Row label="Plan" value={user?.plan === "pro" ? "Pro" : "Free"} onPress={() => navigation.navigate("Pricing")} />
+          <Row label="Rank" value={user?.plan === "pro" ? "Chunin" : user?.plan === "jonin" ? "Jonin" : "Genin"} onPress={() => navigation.navigate("Pricing")} />
         </StaggerReveal>
 
         <StaggerReveal style={s.section} delay={160} profile="smooth">
@@ -232,7 +232,7 @@ export default function SettingsScreen({ navigation }) {
               <Switch
                 value={notificationsEnabled}
                 onValueChange={toggleNotifications}
-                trackColor={{ false: "#cbd5e1", true: "#8ab0ad" }}
+                trackColor={{ false: "#cbd5e1", true: "#818CF8" }}
                 thumbColor={notificationsEnabled ? colors.primary : "#fff"}
               />
             }
@@ -444,7 +444,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "rgba(18,94,89,0.08)",
+    backgroundColor: "rgba(99,102,241,0.08)",
     paddingHorizontal: 10,
     paddingVertical: 8,
   },

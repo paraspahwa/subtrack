@@ -10,7 +10,7 @@ import AnalyticsPanel from "../components/AnalyticsPanel";
 import StaggerReveal from "../components/StaggerReveal";
 import { useTheme } from "../ThemeContext";
 
-const FREE_LIMIT = 1;
+const FREE_LIMIT = 3;
 
 export default function DashboardScreen({ navigation }) {
   const { theme } = useTheme();
@@ -102,7 +102,7 @@ export default function DashboardScreen({ navigation }) {
     const activeCount = subs.filter((s) => s.is_active).length;
     const isPro = userInfo?.plan !== "free";
     if (!isPro && activeCount >= FREE_LIMIT) {
-      Alert.alert("Free Plan Limit", "Free accounts can track 1 subscription. Upgrade to Pro for unlimited tracking.", [
+      Alert.alert("Genin Limit Reached", "Genin rank can track 3 subscriptions. Upgrade to Chunin for unlimited tracking.", [
         { text: "Later", style: "cancel" },
         { text: "See Plans", onPress: () => navigation.navigate("Pricing") },
       ]);
@@ -202,6 +202,12 @@ export default function DashboardScreen({ navigation }) {
               </LinearGradient>
             </TouchableOpacity>
           )}
+          <TouchableOpacity onPress={() => navigation.navigate("Calendar")} style={s.iconBtn} hitSlop={8}>
+            <Text style={s.iconTxt}>📅</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("BossBattle")} style={s.iconBtn} hitSlop={8}>
+            <Text style={s.iconTxt}>⚔</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate("Settings")} style={s.iconBtn} hitSlop={8}>
             <Text style={s.iconTxt}>⚙</Text>
           </TouchableOpacity>
@@ -225,7 +231,7 @@ export default function DashboardScreen({ navigation }) {
               <View>
                 <Text style={s.heroGreet}>Hello{userInfo?.full_name ? `, ${userInfo.full_name.split(" ")[0]}` : ""} 👋</Text>
                 <Text style={s.heroTitle}>{activeCount} active subscription{activeCount !== 1 ? "s" : ""}</Text>
-                <Text style={s.heroSub}>{isPro ? "Pro plan · Unlimited tracking" : activeCount >= FREE_LIMIT ? "Free plan · Limit reached — upgrade for more" : `Free plan · ${FREE_LIMIT - activeCount} free slot left`}</Text>
+                <Text style={s.heroSub}>{isPro ? "Chunin · Unlimited tracking" : activeCount >= FREE_LIMIT ? "Genin · Limit reached — upgrade for more" : `Genin · ${FREE_LIMIT - activeCount} slot${FREE_LIMIT - activeCount !== 1 ? "s" : ""} left`}</Text>
               </View>
               <View style={s.heroActions}>
                 <TouchableOpacity onPress={() => setShowAnalytics(v => !v)} style={[s.toggleBtn, showAnalytics && s.toggleBtnActive]}>
@@ -239,7 +245,7 @@ export default function DashboardScreen({ navigation }) {
 
             {atLimit && (
               <View style={s.limitBanner}>
-                <Text style={s.limitTxt}>Free limit reached — upgrade for unlimited tracking.</Text>
+                <Text style={s.limitTxt}>Genin limit reached — become Chunin for unlimited tracking.</Text>
                 <TouchableOpacity onPress={() => navigation.navigate("Pricing")} style={s.limitCta} hitSlop={8}>
                   <Text style={s.limitCtaTxt}>Upgrade →</Text>
                 </TouchableOpacity>

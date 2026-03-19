@@ -34,7 +34,7 @@ export default function LandingScreen({ navigation }) {
   return (
     <SafeAreaView style={s.safe}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={["#fff8eb", "#f6f3ea", "#efe9da"]} style={s.heroWrap}>
+        <LinearGradient colors={["#eef2ff", "#f5f3ff", "#fdf4ff"]} style={s.heroWrap}>
           <BrandShapes variant="landing" />
           <View style={s.logoWrap}>
             <Text style={s.logoMarkText}>S</Text>
@@ -82,7 +82,7 @@ export default function LandingScreen({ navigation }) {
           ))}
         </StaggerReveal>
         <StaggerReveal delay={250} profile="smooth">
-          <LinearGradient colors={["#0f4b47", "#125e59"]} style={s.ctaWrap}>
+          <LinearGradient colors={["#4F46E5", "#6366F1"]} style={s.ctaWrap}>
             <Text style={s.ctaTitle}>Take back your recurring spend today</Text>
             <Text style={s.ctaSub}>Join SubTrack and turn hidden renewals into predictable, intentional spending.</Text>
             <InteractiveButton
@@ -116,7 +116,7 @@ const s = StyleSheet.create({
   navBtnText: { fontFamily: "Inter_600SemiBold", color: colors.text2, fontSize: 13 },
 
   heroContent: { paddingVertical: 10 },
-  kicker: { fontFamily: "Inter_600SemiBold", color: colors.cyan, textTransform: "uppercase", letterSpacing: 1, fontSize: 11, marginBottom: 10 },
+  kicker: { fontFamily: "Inter_600SemiBold", color: colors.primary, textTransform: "uppercase", letterSpacing: 1, fontSize: 11, marginBottom: 10 },
   heroTitle: { fontFamily: "Poppins_900Black", color: colors.text, fontSize: 36, lineHeight: 44, marginBottom: 12 },
   heroAccent: { color: colors.primaryLight },
   heroSub: { fontFamily: "Inter_400Regular", color: colors.text2, fontSize: 16, lineHeight: 24, marginBottom: 24 },
@@ -134,7 +134,7 @@ const s = StyleSheet.create({
   sectionSub: { fontFamily: "Inter_400Regular", color: colors.text3, fontSize: 15, marginTop: 6, marginBottom: 16 },
 
   pillarCard: { backgroundColor: colors.card2, borderWidth: 1, borderColor: colors.border2, borderRadius: 18, padding: 16, flexDirection: "row", marginBottom: 10 },
-  pillarIndex: { width: 38, height: 38, borderRadius: 11, backgroundColor: "rgba(18,94,89,0.12)", alignItems: "center", justifyContent: "center", marginRight: 12 },
+  pillarIndex: { width: 38, height: 38, borderRadius: 11, backgroundColor: "rgba(99,102,241,0.12)", alignItems: "center", justifyContent: "center", marginRight: 12 },
   pillarIndexText: { fontFamily: "Inter_700Bold", color: colors.primary, fontSize: 13 },
   pillarBody: { flex: 1 },
   pillarTitle: { fontFamily: "Inter_700Bold", fontSize: 17, color: colors.text, marginBottom: 3 },
@@ -144,7 +144,7 @@ const s = StyleSheet.create({
   ctaTitle: { fontFamily: "Poppins_800ExtraBold", fontSize: 27, color: "#f8fafc", lineHeight: 33, marginBottom: 8 },
   ctaSub: { fontFamily: "Inter_400Regular", fontSize: 15, color: "rgba(248,250,252,0.84)", lineHeight: 22, marginBottom: 18 },
   ctaInteractive: { marginTop: 2 },
-  ctaInteractiveText: { color: colors.primaryDark },
+  ctaInteractiveText: { color: "#4F46E5" },
 
   footer: { paddingHorizontal: 20, paddingBottom: 30, alignItems: "center" },
   footerText: { fontFamily: "Inter_500Medium", color: colors.text4, fontSize: 12 },
